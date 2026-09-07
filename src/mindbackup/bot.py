@@ -25,10 +25,22 @@ from telegram.ext import (
     filters,
 )
 
-from .config import Settings, load_settings
-from .extract import LLMError, extract_atoms
-from .pipeline import TranscriptionError, VaultWriteError, ingest_audio, local_today
-from .review import (
+from mindbackup.bot_module.authoriser import authorizer
+from mindbackup.bot_module.utils import get_settings
+from mindbackup.browse import (
+    CB_PAGE,
+    CB_TOPIC,
+    back_keyboard,
+    chunk_message,
+    render_topic_list,
+    resolve_topic,
+    topic_body,
+    topics_keyboard,
+)
+from mindbackup.config import Settings, load_settings
+from mindbackup.extract import LLMError, extract_atoms
+from mindbackup.pipeline import TranscriptionError, VaultWriteError, ingest_audio, local_today
+from mindbackup.review import (
     CB_APPROVE,
     CB_DISCARD,
     CB_EDIT,
@@ -38,7 +50,7 @@ from .review import (
     render_review,
     review_keyboard,
 )
-from .topics import known_topics
+from mindbackup.topics import known_topics, topic_counts
 
 logger = logging.getLogger(__name__)
 
@@ -47,47 +59,23 @@ MAX_PREVIEW_CHARS = 500
 HELP_TEXT = (
     "🎙 *Voice Mind Backup*\n\n"
     "Send me a voice note and I'll transcribe it into your Obsidian vault.\n\n"
+    "/get\\_topic — browse what's been filed, one topic at a time\n"
     "/status — show where memos go and today's count\n"
     "/help — this message"
 )
 
 
-def _settings(context: ContextTypes.DEFAULT_TYPE) -> Settings:
-    return context.application.bot_data["settings"]
-
-
-def _authorised(update: Update, settings: Settings) -> bool:
-    user = update.effective_user
-    return user is not None and user.id in settings.allowed_users
-
-
-async def _reject(update: Update) -> None:
-    user = update.effective_user
-    logger.warning(
-        "Rejected message from unauthorised user id=%s username=%s",
-        getattr(user, "id", "?"),
-        getattr(user, "username", "?"),
-    )
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "This is a private bot and you're not on its allowlist."
-        )
-
-
+@authorizer
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    settings = _settings(context)
-    if not _authorised(update, settings):
-        return await _reject(update)
     message = update.effective_message
     if message is None:
         return
     await message.reply_markdown(HELP_TEXT)
 
 
+@authorizer
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    settings = _settings(context)
-    if not _authorised(update, settings):
-        return await _reject(update)
+    settings = get_settings(context)
     message = update.effective_message
     if message is None:
         return
@@ -114,12 +102,102 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
+@authorizer
+async def cmd_get_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List the vault's topics; `/get_topic <name>` jumps straight to one."""
+    settings = get_settings(context)
+    message = update.effective_message
+    if message is None:
+        return
+
+    topics = known_topics(settings)
+
+    requested = " ".join(context.args or []).strip()
+    if requested:
+        match = resolve_topic(requested, topics)
+        if match is not None:
+            await _send_topic(message, match, settings)
+            return
+        await message.reply_text(f"🤷 No topic matching “{requested}”. Pick one:")
+
+    await message.reply_text(
+        render_topic_list(topics),
+        parse_mode="Markdown",
+        reply_markup=topics_keyboard(topics, 0, topic_counts(settings)) if topics else None,
+    )
+
+
+async def _send_topic(message, topic: str, settings: Settings, edit: bool = False) -> None:
+    """Send a whole topic page, split across as many messages as it takes.
+
+    No parse_mode: the page is arbitrary text the user may have edited by hand,
+    and a stray asterisk must not turn into a Telegram parse error that eats
+    the whole reply.
+    """
+    body = topic_body(topic, settings)
+    if not body:
+        text = f"📄 *{topic}* is empty."
+        if edit:
+            await message.edit_text(text, parse_mode="Markdown", reply_markup=back_keyboard())
+        else:
+            await message.reply_text(text, parse_mode="Markdown", reply_markup=back_keyboard())
+        return
+
+    parts = chunk_message(f"📄 {topic}\n\n{body}")
+    last = len(parts) - 1
+    for index, part in enumerate(parts):
+        markup = back_keyboard() if index == last else None
+        if index == 0 and edit:
+            await message.edit_text(part, reply_markup=markup)
+        else:
+            await message.reply_text(part, reply_markup=markup)
+
+
+@authorizer
+async def handle_topic_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Paging through the topic list, and opening one."""
+    settings = get_settings(context)
+    query = update.callback_query
+    if query is None:
+        return
+    await query.answer()
+
+    message = query.message
+    if message is None:
+        return
+
+    data = query.data or ""
+    topics = known_topics(settings)
+
+    if data.startswith(CB_TOPIC):
+        topic = resolve_topic(data[len(CB_TOPIC) :], topics)
+        if topic is None:
+            # The page was renamed or deleted in Obsidian since the list was drawn.
+            await query.edit_message_text(
+                "🤷 That topic is gone. /get_topic to see what's there now."
+            )
+            return
+        await _send_topic(message, topic, settings, edit=True)
+        return
+
+    page = 0
+    if data.startswith(CB_PAGE):
+        try:
+            page = int(data[len(CB_PAGE) :])
+        except ValueError:
+            page = 0
+
+    await query.edit_message_text(
+        render_topic_list(topics, page),
+        parse_mode="Markdown",
+        reply_markup=topics_keyboard(topics, page, topic_counts(settings)) if topics else None,
+    )
+
+
+@authorizer
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Voice note / audio file -> transcript -> vault, with a reply either way."""
-    settings = _settings(context)
-    if not _authorised(update, settings):
-        return await _reject(update)
-
+    settings = get_settings(context)
     message = update.effective_message
     if message is None:
         return
@@ -233,16 +311,14 @@ async def _offer_extraction(
     context.application.bot_data.setdefault("reviews", {})[sent.message_id] = review
 
 
+@authorizer
 async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Approve / edit / discard on a pending extraction."""
-    settings = _settings(context)
+    settings = get_settings(context)
     query = update.callback_query
     if query is None:
         return
     await query.answer()
-
-    if not _authorised(update, settings):
-        return await _reject(update)
 
     reviews: dict = context.application.bot_data.setdefault("reviews", {})
     message = query.message
@@ -287,10 +363,8 @@ def render_review_plain(review: PendingReview) -> str:
     return "\n".join(lines)
 
 
+@authorizer
 async def handle_other(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    settings = _settings(context)
-    if not _authorised(update, settings):
-        return await _reject(update)
     message = update.effective_message
     if message is None:
         return
@@ -318,6 +392,7 @@ def build_application(settings: Settings):
 
     app.add_handler(CommandHandler(["start", "help"], cmd_start))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("get_topic", cmd_get_topic))
     app.add_handler(
         MessageHandler(
             filters.VOICE | filters.AUDIO | filters.Document.AUDIO, handle_voice
@@ -325,6 +400,7 @@ def build_application(settings: Settings):
     )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_other))
     app.add_handler(CallbackQueryHandler(handle_review_button, pattern=r"^mb:"))
+    app.add_handler(CallbackQueryHandler(handle_topic_button, pattern=r"^mbt:"))
     app.add_error_handler(on_error)
     return app
 

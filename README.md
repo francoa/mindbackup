@@ -107,6 +107,20 @@ mindbackup doctor                       # preflight checks
 `ingest` runs the *identical* code path the bot does, so if it works here it
 works from the phone.
 
+### Telegram commands
+
+| Command | What it does |
+| --- | --- |
+| *(send a voice note)* | transcribe into `Memos/`, then offer the extracted atoms for review |
+| `/get_topic` | list the topics, tap one to read its whole page |
+| `/get_topic <name>` | skip the list and open that topic straight away |
+| `/status` | where memos go, and today's count |
+| `/help` | the same, shorter |
+
+`/get_topic` shows the *page* under `Topics/`, so anything you edited by hand in
+Obsidian comes back with it. A page too long for one Telegram message is split
+across several rather than truncated.
+
 ## Docker Design Notes
 
 - Multi-stage: deps resolve from `uv.lock` in the builder, only the finished

@@ -39,3 +39,6 @@ bash:
 
 bash-root:
 	{{ docker_compose_executable }} {{ docker_compose_file }} exec {{ service_name }} bash
+
+test:
+	python3 -m pytest -q .

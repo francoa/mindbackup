@@ -114,6 +114,11 @@ def _new_topic_page(topic: str) -> str:
     )
 
 
+def topic_page_path(topic: str, settings: Settings) -> Path:
+    """Where a topic's page lives. One flat file per topic (C7)."""
+    return settings.topic_path / f"{topic_slug(topic)}.md"
+
+
 def append_to_topic(topic: str, stored: StoredAtom, settings: Settings) -> Path:
     """Append one atom to its topic page, creating the page if needed."""
     topic_dir = settings.topic_path
@@ -122,7 +127,7 @@ def append_to_topic(topic: str, stored: StoredAtom, settings: Settings) -> Path:
     except OSError as exc:
         raise VaultWriteError(f"Cannot create topic folder {topic_dir}: {exc}") from exc
 
-    path = topic_dir / f"{topic_slug(topic)}.md"
+    path = topic_page_path(topic, settings)
 
     if stored.id in _existing_block_ids(path):
         logger.debug("Atom %s already on %s, skipping.", stored.id, path.name)
@@ -190,15 +195,15 @@ def iter_index(settings: Settings) -> Iterator[StoredAtom]:
             logger.warning("Skipping malformed line in atom index.")
 
 
-def known_topics(settings: Settings) -> list[str]:
-    """Topics the vault already knows, most-used first.
-
-    Fed to the extractor so it reuses `voice-mind-backup` instead of coining
-    `the voice project` — the whole point of the resolution step.
+def topic_counts(settings: Settings) -> dict[str, int]:
+    """Every topic the vault knows, mapped to how many atoms it holds.
 
     Topic pages are matched back to their canonical name by slug, not by
     de-slugifying the filename: `voice-mind-backup.md` must not re-enter the
     list as the near-duplicate "voice mind backup" and undo the deduping.
+
+    A page with no atoms behind it still counts as a topic (at zero) — it may
+    be one you wrote by hand, and `/get_topic` should still offer it.
     """
     counts: dict[str, int] = {}
     for stored in iter_index(settings):
@@ -213,6 +218,16 @@ def known_topics(settings: Settings) -> list[str]:
                 continue  # already represented under its canonical name
             counts.setdefault(_topic_name_from_page(page), 0)
 
+    return counts
+
+
+def known_topics(settings: Settings) -> list[str]:
+    """Topics the vault already knows, most-used first.
+
+    Fed to the extractor so it reuses `voice-mind-backup` instead of coining
+    `the voice project` — the whole point of the resolution step.
+    """
+    counts = topic_counts(settings)
     return [t for t, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
 
 
@@ -311,5 +326,7 @@ __all__ = [
     "iter_index",
     "known_topics",
     "search",
+    "topic_counts",
+    "topic_page_path",
     "topic_slug",
 ]

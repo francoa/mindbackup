@@ -114,12 +114,17 @@ def test_bad_kind_and_topics_are_normalised(settings, monkeypatch):
     assert result.atoms[0].confidence == 1.0, "unparseable confidence falls back"
 
 
-def test_extract_memo_files_only_confident_atoms(settings, fake_llm):
+def test_extract_memo_files_every_atom_flagging_the_ambiguous_one(settings, fake_llm):
     memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)
     result = pipeline.extract_memo(memo.path, settings)
 
     assert len(result.atoms) == 3
-    assert len(result.filed) == 2, "the ambiguous atom must be held back"
+    # An ambiguous atom is filed rather than dropped, carrying the question
+    # with it, so nothing said is lost while clarification is still manual.
+    assert len(result.filed) == 3
+    ambiguous = [a for a in result.filed if "AMBIGUITY:" in a.text]
+    assert len(ambiguous) == 1, "the ambiguous atom is filed, marked as such"
+    assert "el de siempre" in ambiguous[0].text
 
     # Topic pages exist and carry a link home to the memo.
     page = settings.topic_path / "voice-mind-backup.md"
@@ -128,6 +133,28 @@ def test_extract_memo_files_only_confident_atoms(settings, fake_llm):
     assert "búsqueda mejor que grep" in content
     assert f"[[{memo.path.stem}]]" in content, "atom must reference its source memo"
     assert "^mb-" in content, "block ref needed for idempotent re-runs"
+
+
+def test_atoms_with_no_topic_land_on_the_default_page(settings, fake_llm):
+    """An atom the model could not classify still has to surface in Obsidian."""
+    memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)
+    pipeline.extract_memo(memo.path, settings)
+
+    page = settings.topic_path / f"{topics.topic_slug(topics.DEFAULT_TOPIC)}.md"
+    assert page.is_file(), "the untopiced atom needs somewhere to live"
+    content = page.read_text(encoding="utf-8")
+    assert "el de siempre" in content
+    assert "grip nuevo" not in content, "atoms with a topic of their own stay off it"
+
+    # The default page is a filing convenience, not a claim about the atom:
+    # the index must still show it as untopiced so a later pass can classify it.
+    untopiced = [a for a in topics.iter_index(settings) if "el de siempre" in a.text]
+    assert len(untopiced) == 1
+    assert untopiced[0].topics == []
+
+    pipeline.extract_memo(memo.path, settings)
+    bullets = [l for l in page.read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
+    assert len(bullets) == 1, "re-extraction must not duplicate the bullet"
 
 
 def test_refiling_is_idempotent(settings, fake_llm):
@@ -139,7 +166,7 @@ def test_refiling_is_idempotent(settings, fake_llm):
     bullets = [l for l in page.read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
     assert len(bullets) == 1, "re-extraction must not duplicate bullets"
 
-    assert sum(1 for _ in topics.iter_index(settings)) == 2, "index must not duplicate"
+    assert sum(1 for _ in topics.iter_index(settings)) == 3, "index must not duplicate"
 
 
 def test_hand_edits_to_topic_pages_survive(settings, fake_llm):
@@ -169,7 +196,7 @@ def test_ask_filters_by_kind_and_topic(settings, fake_llm):
     memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)
     pipeline.extract_memo(memo.path, settings)
 
-    assert len(topics.search(settings, "", kind="todo")) == 2
+    assert len(topics.search(settings, "", kind="todo")) == 3
     assert len(topics.search(settings, "", kind="idea")) == 0
     assert len(topics.search(settings, "", topic="padel")) == 1
     assert len(topics.search(settings, "", topic="PADEL")) == 1, "topic match is case-insensitive"
