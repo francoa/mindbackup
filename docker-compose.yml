@@ -1,0 +1,86 @@
+services:
+  mindbackup:
+    build:
+      context: .
+      args:
+        # Which Whisper model is baked into the image. Keep in sync with
+        # MINDBACKUP_STT_MODEL — the runtime container is offline, so a model
+        # that wasn't baked in cannot be downloaded later.
+        # tiny | base | small | medium | large-v3 (see tests/BENCHMARK.md)
+        WHISPER_MODEL: ${MINDBACKUP_STT_MODEL:-medium}
+    image: mindbackup:local
+    container_name: mindbackup
+    secrets:
+      - bot_token
+      # Only needed if you enable the intelligence layer (extract / ask).
+      # Create the file (or drop this line) — a missing secret file stops the
+      # stack from starting.
+      - llm_api_key
+
+    # Secrets and tuning live in .env (never baked into the image).
+    env_file: .env
+
+    environment:
+      # Container-internal paths; the bind mounts below decide where they land
+      # on the host. Set here rather than in .env so a host-shaped .env can't
+      # accidentally point the container at a path that doesn't exist in it.
+      OBSIDIAN_VAULT_PATH: /vault
+      MINDBACKUP_AUDIO_ARCHIVE: /archive
+
+    volumes:
+      # The vault must be writable — this is the whole point of the service.
+      - ${VAULT_PATH:?set VAULT_PATH in .env}:/vault
+      # Raw audio archive (constraint C4: transcripts stay re-derivable).
+      - ${ARCHIVE_PATH:-./archive}:/archive
+
+    # The container's uid must be able to write the vault on the host.
+    # Default matches the image's `mindbackup` user; override if yours differs
+    # (`id -u`:`id -g`).
+    user: "${UID:-1000}:${GID:-1000}"
+
+    # Outbound only: Telegram polling, plus the STT API if you switch off local.
+    # The intelligence layer (extract / ask) also calls MINDBACKUP_LLM_BASE_URL
+    # outbound; with no LLM configured the container talks only to Telegram.
+    # No inbound ports — long polling means nothing needs to be exposed.
+
+    # --- Hardening -------------------------------------------------------
+    # It handles untrusted input (audio from the internet) and holds a token
+    # plus write access to your notes, so give it the least it can run with.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      # Voice notes are downloaded here, transcribed, then discarded.
+      - /tmp:size=512m,mode=1777
+
+    # faster-whisper is CPU-bound; without a cap one long memo can starve the
+    # host. Memory must exceed the model's peak RSS or the container is
+    # SIGKILLed mid-transcription and (with restart: unless-stopped) crash-loops.
+    # Measured peaks: base 0.45G, small 0.9G, medium 2.6G, large-v3 4.6G.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: ${MINDBACKUP_MEMORY_LIMIT:-4g}
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test: ["CMD", "mindbackup", "doctor"]
+      interval: 5m
+      timeout: 30s
+      start_period: 30s
+      retries: 3
+
+
+secrets:
+  bot_token:
+    file: ~/.local/share/voice-mind-backup/token.txt
+  llm_api_key:
+    file: ~/.local/share/voice-mind-backup/llm-api-key.txt

@@ -1,0 +1,16 @@
+# Build context excludes — keep secrets and bulk out of the image.
+.env
+.venv/
+.venv-verify/
+.git/
+.gitignore
+.pytest_cache/
+__pycache__/
+*.pyc
+*.egg-info/
+.sandbox-vault/
+.sandbox-archive/
+audio-archive/
+.tmp-audio/
+tests/
+deploy/

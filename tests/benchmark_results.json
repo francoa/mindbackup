@@ -1,0 +1,190 @@
+[
+  {
+    "model": "tiny",
+    "language": "es",
+    "vocabulary": true,
+    "detected_language": "es",
+    "load_s": 2.5,
+    "transcribe_s": 1.9,
+    "realtime_factor": 0.02,
+    "wer": 0.3929,
+    "wer_no_accents": 0.3869,
+    "term_recall": 0.538,
+    "missing_terms": [
+      "padel",
+      "core",
+      "papas fritas",
+      "ternera",
+      "age of empires",
+      "cyber seguridad"
+    ],
+    "chars": 951,
+    "text": "Cuando era chico, puedo mucho al pade, el pade era un grande pade, sin embargo, ha sido ver mucho a lumbar. Cuando iba al gym después de entrenar, me dolían las lumbares, entonces trataba de trabajar mucho el cor. Después de entrenar, comía, miran esta y papas pericas. Me dejaba, siempre, al medio día, se traía una bandeja llena de milanesas de bajas. Al eternero, bueno, bajas, que es lo. A veces, es así, no siempre igual, pero a veces. Después jugamos a listo a un pade. Cuando me hice más grande, me puse a trabajar el sitio de seguridad, esto se terminó y ya no tuvo de milanesas. Sin embargo, fíjame muchas conferencias de hacking. Ahora estoy haciendo un MBA y escribiendo una historia a una escrónica que con toda seguridad va a pasar en transcribir. Pero, es un té. Cuando lo venés a trabajar todo este texto, estarán listo para poder recibir audio completo, con manifestaciones en conexa y palabras y o sin sentido. Creo, bueno, la severa.",
+    "tag": ""
+  },
+  {
+    "model": "base",
+    "language": "es",
+    "vocabulary": true,
+    "detected_language": "es",
+    "load_s": 0.3,
+    "transcribe_s": 3.0,
+    "realtime_factor": 0.04,
+    "wer": 0.2738,
+    "wer_no_accents": 0.256,
+    "term_recall": 0.692,
+    "missing_terms": [
+      "papas fritas",
+      "ternera",
+      "age of empires",
+      "cyber seguridad"
+    ],
+    "chars": 968,
+    "text": "Cuando era chico, jugaba mucho al padel, el padel era un gran deporte. Sin embargo, me ha sido ver mucho a lumbar, cuando iba al gym, después de entrenar, me dolian las lumbares. Entonces, trataba de trabajar mucho el core. Después de entrenar, comía a mirar en estas lumbares y papas baritas. Me les hacía mi mamá, siempre al medio día, se traía una bandeja llena de milanesas de vacas, de tarnera, bueno, vacas. A veces, es así. No siempre igual, pero a veces, después jugábamos al gym, cuando me hice más grande, me puse a trabajar en la historia de seguridad, esto se terminó y ya no tuve milanesas. Sin embargo, si fui a muchas conferencias de hacking, ahora estoy haciendo un MBA y escribiendo una historia anagronica que con toda seguridad vas a fallar en transcribir. Pero, es un texto. Cuando logres observar todo ese texto, estará listo para poder recibir a varios completos, con manifestaciones, en conexo de palabras, y sin sentir. Creo. Bueno, ya se verá.",
+    "tag": ""
+  },
+  {
+    "model": "small",
+    "language": "es",
+    "vocabulary": true,
+    "detected_language": "es",
+    "load_s": 1.2,
+    "transcribe_s": 12.6,
+    "realtime_factor": 0.16,
+    "wer": 0.119,
+    "wer_no_accents": 0.1131,
+    "term_recall": 0.846,
+    "missing_terms": [
+      "papas fritas",
+      "cyber seguridad"
+    ],
+    "chars": 955,
+    "text": "Cuando era chico, jugaba mucho al padel. El padel era un gran deporte, sin embargo, me hacía doler mucho a las lumbares. Cuando iba al gym, después de entrenar, me dolían las lumbares. Entonces trataba de trabajar mucho el core. Después de entrenar, comía, miran estas y papas pericas. Me las hacía mi mamá. Siempre al mediodía se traía una bandeja llena de milanesas de vacas, de ternera. Bueno, vacas. A veces es así. No siempre igual, pero a veces. Después jugábamos al Ace of Empire. Cuando me hice más grande y me puse a trabajar el server seguridad, esto se terminó y ya no tuve milanesas. Sin embargo, sí fui a muchas conferencias de hacking. Ahora estoy haciendo un MBA y escribiendo una historia anacrónica que con toda seguridad vas a fallar en transcribir. Pero es un test. Cuando logres destrabar todo ese texto, estarás listo para poder recibir audios completos, con manifestaciones inconectas y palabras sin sentido. Creo. Bueno, ya se verá.",
+    "tag": ""
+  },
+  {
+    "model": "medium",
+    "language": "es",
+    "vocabulary": true,
+    "detected_language": "es",
+    "load_s": 16.0,
+    "transcribe_s": 21.3,
+    "realtime_factor": 0.26,
+    "wer": 0.131,
+    "wer_no_accents": 0.125,
+    "term_recall": 0.923,
+    "missing_terms": [
+      "age of empires"
+    ],
+    "chars": 938,
+    "text": "Cuando era chico jugaba mucho al padel, el padel era un gran deporte, sin embargo me hacía doler mucho las lumbares, cuando iba al gym después de entrenar me dolían las lumbares, entonces trataba de trabajar mucho el core, después de entrenar comía milanesas y papas fritas, me las hacía mi mamá, siempre al mediodía se traía una bandeja llena de milanesas de vacas, de terneras, bueno, vacas. A veces es así, no siempre igual, pero a veces. Después jugábamos al age vampire, cuando me hice más grande y me puse a trabajar en ciberseguridad esto se terminó y ya no tuve milanesa. Sin embargo sí fui a muchas conferencias de hacking, ahora estoy haciendo un MBA y escribiendo una historia anacrónica que con toda seguridad vas a fallar en transcribir, pero es un texto, cuando logres descargar todo ese texto estarás listo para poder recibir audio completo con manifestaciones inconectas y palabrerios sin sentido, creo, bueno, ya se verá.",
+    "tag": ""
+  },
+  {
+    "model": "large-v3",
+    "language": "es",
+    "vocabulary": true,
+    "detected_language": "es",
+    "load_s": 30.5,
+    "transcribe_s": 32.8,
+    "realtime_factor": 0.41,
+    "wer": 0.125,
+    "wer_no_accents": 0.1071,
+    "term_recall": 0.846,
+    "missing_terms": [
+      "age of empires",
+      "hacking"
+    ],
+    "chars": 946,
+    "text": "Cuando era chico, jugaba mucho al pádel. El pádel era un gran deporte. Sin embargo, me hacía doler mucho las lumbares. Cuando iba al gym, después de entrenar, me dolían las lumbares. Entonces, trataba de trabajar mucho el core. Después de entrenar, comía milanesas y papas fritas. Me las hacía mi mamá. Siempre, al mediodía, se traía una bandeja llena de milanesas de vaca. Ah, de ternera. Bueno, vaca. A veces es así. No siempre igual, pero a veces. Después jugábamos a Leisure Vampire. Cuando me hice más grande y me puse a trabajar en ciberseguridad, esto se terminó y ya no tuve milanesas. Sin embargo, sí fui a muchas conferencias. Ahora estoy haciendo un MBA y escribiendo una historia anacrónica que con toda seguridad vas a fallar en transcribir. Pero es un texto. Cuando logres destrabar todo este texto, estarás listo para poder recibir audios completos con manifestaciones inconectas y palabreríos sin sentido. Creo. Bueno, ya se verá.",
+    "tag": ""
+  },
+  {
+    "model": "small",
+    "language": "es",
+    "vocabulary": false,
+    "detected_language": "es",
+    "load_s": 1.1,
+    "transcribe_s": 7.7,
+    "realtime_factor": 0.09,
+    "wer": 0.1607,
+    "wer_no_accents": 0.1548,
+    "term_recall": 0.692,
+    "missing_terms": [
+      "padel",
+      "papas fritas",
+      "age of empires",
+      "cyber seguridad"
+    ],
+    "chars": 951,
+    "text": "cuando era chico, jugaba mucho al padre, el padre era un gran deporte, sin embargo, me hacía doler mucho a las lumbares, cuando iba al gym, después de entrenar, me dolían las lumbares, entonces trataba de trabajar mucho el core, después de entrenar comía milanesas y papas pericas, me las hacía mi mamá, siempre al medio día se traía una bandeja llena de milanesas de vacas, de ternera, bueno, vacas, a veces es así, no siempre igual, pero a veces, después jugábamos al ace vampire, cuando me hice más grande y me puse a trabajar el civil de seguridad, esto se terminó y ya no tuve milanesas, sin embargo, sí fui a muchas conferencias de hacking, ahora estoy haciendo un MBA y escribiendo una historia anacrónica que con toda seguridad vas a fallar en transcribir, pero es un test, cuando logres de salvar todo ese texto estarás listo para poder recibir audios completos, con manifestaciones sin conecto y palabras sin sentido, creo, bueno, ya se verá",
+    "tag": ""
+  },
+  {
+    "model": "medium",
+    "language": "es",
+    "vocabulary": false,
+    "detected_language": "es",
+    "load_s": 1.5,
+    "transcribe_s": 19.4,
+    "realtime_factor": 0.24,
+    "wer": 0.1369,
+    "wer_no_accents": 0.131,
+    "term_recall": 0.846,
+    "missing_terms": [
+      "padel",
+      "age of empires"
+    ],
+    "chars": 939,
+    "text": "Cuando era chico jugaba mucho al paddle, el paddle era un gran deporte, sin embargo me hacía doler mucho las lumbares, cuando iba al gym después de entrenar me dolían las lumbares, entonces trataba de trabajar mucho el core, después de entrenar comía milanesas y papas fritas, me las hacía mi mamá, siempre al medio día se traía una bandeja llena de milanesas de vacas, de terneras, bueno vacas, a veces es así, no siempre igual, pero a veces, después jugábamos al age vampire, cuando me hice más grande y me puse a trabajar en ciberseguridad esto se terminó y ya no tuve milanesas, sin embargo sí fui a muchas conferencias de hacking, ahora estoy haciendo un MBA y escribiendo una historia anacrónica que con toda seguridad vas a fallar en transcribir, pero es un texto, cuando logres destrabar todo ese texto estarás listo para poder recibir audio completo con manifestaciones inconexas y palabrerios sin sentido, creo, bueno ya se verá.",
+    "tag": ""
+  },
+  {
+    "model": "tiny",
+    "language": "es",
+    "vocabulary": false,
+    "detected_language": "es",
+    "load_s": 0.8,
+    "transcribe_s": 1.8,
+    "realtime_factor": 0.02,
+    "wer": 0.4167,
+    "wer_no_accents": 0.4167,
+    "term_recall": 0.385,
+    "missing_terms": [
+      "padel",
+      "lumbares",
+      "core",
+      "papas fritas",
+      "bandeja",
+      "ternera",
+      "age of empires",
+      "cyber seguridad"
+    ],
+    "chars": 954,
+    "text": "Cuando era chico, puedo mucho al pade, el pade era un grande pade. Sin embargo, ha sido haber mucho al un mare. Cuando iba al gym después de entrenar, me dolían las y un pade. Entonces trataba de trabajar mucho el cor. Después de entrenar, comía miran esta y papas pericas. Me dejaba siempre al medio día. Se traía una bandesta llena de milanesas de bajas. Al eternero, bueno, bajas. ¿Qué es lo? A veces es así. No siempre igual. Pero a veces. Después jugamos a listo a un pade. Cuando me hice más grande, me puse a trabajar el sitio de seguridad. Esto se terminó y ya no tuvo de milanesas. Sin embargo, fíjame muchas conferencias de hacking. Ahora estoy haciendo un MBA y escribiendo una historia a una escrónica que con toda seguridad va a pasar en transcribir. Pero es un té. Cuando lo venés a trabajar todo este texto, estarán listo para poder recibir audio completo con manifestaciones y en conecta y palabras yo sin sentido. Creo. Bueno, la severa.",
+    "tag": ""
+  },
+  {
+    "model": "base",
+    "language": "es",
+    "vocabulary": false,
+    "detected_language": "es",
+    "load_s": 0.3,
+    "transcribe_s": 3.0,
+    "realtime_factor": 0.04,
+    "wer": 0.3214,
+    "wer_no_accents": 0.3036,
+    "term_recall": 0.538,
+    "missing_terms": [
+      "padel",
+      "lumbares",
+      "papas fritas",
+      "bandeja",
+      "ternera",
+      "age of empires"
+    ],
+    "chars": 950,
+    "text": "Cuando era chico, jugaba mucho al padre. El padre era un grande pobre. Sin embargo, me ha sido ver mucho a Lumbar, cuando iba al gym después de entrenar, me dolian las Lumbar. Entonces, trataba de trabajar mucho el core. Después de entrenar, comía miran estas y papas fricas. Me les hacía mi mamá, siempre al medio día, se traía una bandesa llena de milanesas de vacas, de tarnera. Bueno, vacas. A veces, no siempre igual, pero a veces. Después jugábamos a Lisbon Bayer. Cuando me hice más grande, me puse a trabajar en ciber seguridad, esto se terminó y ya no tuve milanesas. Sin embargo, si fui a muchas conferencias de hacking, ahora estoy haciendo un MBA y escribiendo una historia anas crónica que con toda seguridad vas a fallar en transcribir. Pero, esto es un texto. Cuando logras de extravar todo ese texto, estarás listo para poder recibir a un completo. Con manifestación e incóneca y palabra ríos sin sentimiento. Creo. Bueno, ya se verá.",
+    "tag": ""
+  }
+]

@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.swp
+*.swo
+*~
+.env
+.pytest_cache/
+audio-archive/
+*.egg-info/
+.sandbox-vault/
+.sandbox-archive/
+.venv-verify/
+.tmp-audio/
+archive/
