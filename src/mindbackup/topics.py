@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 ATOM_INDEX_NAME = "atoms.jsonl"
 BLOCK_REF_RE = re.compile(r"\^mb-([0-9a-f]{10})\s*$", re.MULTILINE)
+DEFAULT_TOPIC = "cambalache"
 
 
 @dataclass(frozen=True)
@@ -261,6 +262,9 @@ def file_atoms(
         append_to_index(stored, settings, known_ids)
         for topic in stored.topics:
             append_to_topic(topic, stored, settings)
+        if not stored.topics:
+            # Assign a default topic so that it appears in Obsidian
+            append_to_topic(DEFAULT_TOPIC, stored, settings)
         filed.append(stored)
 
     logger.info("Filed %d atom(s) from %s.", len(filed), memo_name)
