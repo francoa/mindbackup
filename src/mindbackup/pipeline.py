@@ -80,8 +80,28 @@ def resolve_memo_date(settings: Settings, recorded_at: datetime | None) -> date:
     return recorded_at.astimezone().date()
 
 
-def archive_audio(audio_path: Path, settings: Settings, memo_date: date) -> Path | None:
+def _free_archive_path(target_dir: Path, stem: str, suffix: str) -> Path:
+    """`stem.ogg`, or `stem_2.ogg`, `stem_3.ogg`... Never an existing path.
+
+    Memo stems are already unique inside the vault, but the archive is bucketed
+    by month, so two memos from different days could still collide if a memo is
+    ever re-ingested. Losing the older recording would break C4.
+    """
+    candidate = target_dir / f"{stem}{suffix}"
+    if not candidate.exists():
+        return candidate
+    for n in range(2, 1000):
+        candidate = target_dir / f"{stem}_{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise OSError(f"No free archive filename for {stem!r} in {target_dir}")
+
+
+def archive_audio(audio_path: Path, settings: Settings, memo: Memo) -> Path | None:
     """Keep the source audio so transcripts stay re-derivable (C4).
+
+    Named after the memo it produced, so a recording and its transcript can be
+    paired by filename alone.
 
     Best-effort: a failed archive must never lose the memo, so it warns
     rather than raising.
@@ -89,10 +109,9 @@ def archive_audio(audio_path: Path, settings: Settings, memo_date: date) -> Path
     if settings.audio_archive is None:
         return None
     try:
-        target_dir = settings.audio_archive / memo_date.strftime("%Y-%m")
+        target_dir = settings.audio_archive / memo.memo_date.strftime("%Y-%m")
         target_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-        target = target_dir / f"{stamp}-{audio_path.name}"
+        target = _free_archive_path(target_dir, memo.path.stem, audio_path.suffix)
         shutil.copy2(audio_path, target)
         return target
     except OSError as exc:
@@ -127,7 +146,7 @@ def ingest_audio(
     memo = write_memo(transcript.text, memo_date, settings.memo_path, source=source)
     logger.info("Wrote memo %s", memo.path)
 
-    archived = archive_audio(audio_path, settings, memo_date)
+    archived = archive_audio(audio_path, settings, memo)
     return IngestResult(memo=memo, transcript=transcript, archived_audio=archived)
 
 

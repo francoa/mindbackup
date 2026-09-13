@@ -18,7 +18,7 @@ from mindbackup.config import (  # noqa: E402
     load_settings,
 )
 
-from mindbackup.pipeline import resolve_memo_date  # noqa: E402
+from mindbackup.pipeline import archive_audio, resolve_memo_date  # noqa: E402
 from mindbackup.stt import build_prompt  # noqa: E402
 
 from mindbackup.vault import (  # noqa: E402
@@ -114,6 +114,64 @@ def test_unknown_timezone_falls_back_without_crashing(tmp_path):
     recorded = datetime(2026, 9, 3, 12, 0, tzinfo=timezone.utc)
     settings = settings_for(tmp_path, timezone="Mars/Olympus")
     assert isinstance(resolve_memo_date(settings, recorded), date)
+
+
+# --- audio archive --------------------------------------------------------
+
+
+def test_archived_audio_takes_the_memo_name(tmp_path):
+    """A recording and its transcript must be pairable by filename alone."""
+    settings = settings_for(tmp_path, audio_archive=tmp_path / "Audio")
+    source = tmp_path / "voice-1234.ogg"
+    source.write_bytes(b"fake audio")
+    memo = write_memo("hello there", date(2026, 9, 4), tmp_path / "Memos")
+
+    archived = archive_audio(source, settings, memo)
+
+    assert archived is not None
+    assert archived.stem == memo.path.stem == "2026-09-04"
+    assert archived.suffix == ".ogg"
+    assert archived.parent.name == "2026-09"
+    assert archived.read_bytes() == b"fake audio"
+
+
+def test_second_memo_same_day_gets_matching_audio_name(tmp_path):
+    settings = settings_for(tmp_path, audio_archive=tmp_path / "Audio")
+    memo_dir = tmp_path / "Memos"
+    source = tmp_path / "a.ogg"
+    source.write_bytes(b"one")
+
+    first = archive_audio(source, settings, write_memo("first", date(2026, 9, 4), memo_dir))
+    second = archive_audio(source, settings, write_memo("second", date(2026, 9, 4), memo_dir))
+
+    assert first is not None and second is not None
+    assert first.name == "2026-09-04.ogg"
+    assert second.name == "2026-09-04_2.ogg"
+
+
+def test_archive_collision_never_clobbers(tmp_path):
+    """Re-ingesting a memo stem must not destroy the earlier recording."""
+    settings = settings_for(tmp_path, audio_archive=tmp_path / "Audio")
+    memo = write_memo("hello", date(2026, 9, 4), tmp_path / "Memos")
+    first_src = tmp_path / "a.ogg"
+    first_src.write_bytes(b"original")
+    second_src = tmp_path / "b.ogg"
+    second_src.write_bytes(b"newer")
+
+    first = archive_audio(first_src, settings, memo)
+    second = archive_audio(second_src, settings, memo)
+
+    assert first is not None and second is not None
+    assert first != second
+    assert first.read_bytes() == b"original"
+
+
+def test_archive_without_configured_dir_is_a_noop(tmp_path):
+    settings = settings_for(tmp_path)
+    source = tmp_path / "a.ogg"
+    source.write_bytes(b"x")
+    memo = write_memo("hello", date(2026, 9, 4), tmp_path / "Memos")
+    assert archive_audio(source, settings, memo) is None
 
 
 # --- config ---------------------------------------------------------------

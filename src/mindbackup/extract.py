@@ -69,7 +69,7 @@ inventing near-duplicates. Invent a new topic only for genuinely new subjects.
 topics, keep the speaker's wording, set confidence below 0.5, and put a \
 specific question in "ambiguity" (e.g. "Does 'the bot' mean voice-mind-backup \
 or the padel booking bot?"). Do NOT guess silently.
-- Preserve the speaker's original language in "text".
+- Always use Spanish in "text".
 """
 
 

@@ -72,7 +72,9 @@ Physio session today. She said my lower back pain comes from tight hamstrings...
 Filenames are `<YYYY-MM-DD>.md`, with `_2`, `_3` suffixes for later memos the
 same day. The raw transcript layer is immutable and complete (constraint C4):
 memos are never overwritten, and the source audio is archived so every
-transcript can be re-derived later with a better model.
+transcript can be re-derived later with a better model. Archived recordings
+are named after the memo they produced (`Audio/2026-09/2026-09-04_2.ogg` for
+`Memos/2026-09-04_2.md`), so a recording and its transcript pair by filename.
 
 ## Running locally
 
