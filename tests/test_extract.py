@@ -268,3 +268,85 @@ def test_known_topics_recovers_names_from_orphan_pages(settings):
         "---\ntype: topic\ntopic: lower back\n---\n\n# lower back\n", encoding="utf-8"
     )
     assert "lower back" in topics.known_topics(settings)
+
+
+# --- folders under Topics/ are incidental, not invisible (C7) ----------------
+
+
+def _write_topic_page(path: Path, topic: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\ntype: topic\ntopic: {topic}\n---\n\n# {topic}\n", encoding="utf-8"
+    )
+
+
+def test_topic_page_in_a_subfolder_is_still_known(settings):
+    """A page the owner dragged into Topics/Health/ must stay a known topic.
+
+    Regression: topic_counts globbed `Topics/*.md`, so a moved page dropped out
+    of known_topics, the extractor stopped seeing the name, and it coined a
+    near-duplicate.
+    """
+    _write_topic_page(settings.topic_path / "Health" / "lower-back.md", "lower back")
+    assert "lower back" in topics.known_topics(settings)
+
+
+def test_atoms_append_to_a_moved_page_instead_of_a_duplicate(settings, fake_llm):
+    """Filing follows the page the owner moved; no second flat page appears."""
+    moved = settings.topic_path / "Projects" / "voice-mind-backup.md"
+    _write_topic_page(moved, "voice-mind-backup")
+
+    memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)
+    pipeline.extract_memo(memo.path, settings)
+
+    assert "grep" in moved.read_text(encoding="utf-8")
+    assert not (settings.topic_path / "voice-mind-backup.md").exists()
+    pages = [p for p in settings.topic_path.rglob("*.md") if p.stem == "voice-mind-backup"]
+    assert pages == [moved]
+
+
+def test_appending_to_a_moved_page_stays_idempotent(settings, fake_llm):
+    """Re-extraction must not double the bullets on a relocated page."""
+    moved = settings.topic_path / "Projects" / "padel.md"
+    _write_topic_page(moved, "padel")
+
+    memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)
+    pipeline.extract_memo(memo.path, settings)
+    first = moved.read_text(encoding="utf-8")
+    pipeline.extract_memo(memo.path, settings)
+
+    assert moved.read_text(encoding="utf-8") == first
+
+
+def test_topic_pages_ignores_dot_directories(settings):
+    """Sidecar/internal folders must never register as topics."""
+    _write_topic_page(settings.topic_path / ".trash" / "old-topic.md", "old topic")
+    assert "old topic" not in topics.known_topics(settings)
+    assert list(topics.iter_topic_pages(settings)) == []
+
+
+def test_duplicate_pages_resolve_to_the_shallowest(settings):
+    """Two hand-made pages for one topic: pick one, deterministically."""
+    flat = settings.topic_path / "padel.md"
+    nested = settings.topic_path / "Sport" / "padel.md"
+    _write_topic_page(flat, "padel")
+    _write_topic_page(nested, "padel")
+
+    assert topics.topic_page_path("padel", settings) == flat
+    assert topics.topic_page_path("padel", settings) == flat, "stable across calls"
+
+
+def test_moved_memo_is_still_extracted(settings, fake_llm):
+    """A memo filed into a subfolder stays in the corpus for `extract`."""
+    memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)
+    archive = settings.memo_path / "2026"
+    archive.mkdir(parents=True, exist_ok=True)
+    moved = archive / memo.path.name
+    memo.path.rename(moved)
+
+    from mindbackup.vault import iter_memos
+
+    assert iter_memos(settings.memo_path) == [moved]
+
+    pipeline.extract_memo(moved, settings)
+    assert topics.search(settings, "grep")

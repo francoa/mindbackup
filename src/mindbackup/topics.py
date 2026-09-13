@@ -6,7 +6,10 @@ across twelve separate ramblings onto one page.
 Two stores, both derived and both re-buildable from raw transcripts (C4):
 
   - `<vault>/Topics/<slug>.md` — human-facing, Obsidian-native, one page per
-    topic, flat. Cross-cutting is handled by links, not nesting (C7).
+    topic. New pages are written flat; cross-cutting is handled by links, not
+    nesting (C7). Folders under `Topics/` are *incidental*: if you drag a page
+    into `Topics/Health/` by hand, we find it there and keep appending to it
+    rather than silently forgetting the topic and starting a duplicate page.
   - `<vault>/.mindbackup/atoms.jsonl` — machine-facing index that `ask` queries.
 
 Appends are idempotent. Every bullet ends in an Obsidian block reference
@@ -114,8 +117,50 @@ def _new_topic_page(topic: str) -> str:
     )
 
 
+def iter_topic_pages(settings: Settings) -> Iterator[Path]:
+    """Every topic page, at any depth under `Topics/`.
+
+    Folders are incidental (C7) — we never create them, but the owner may, and
+    a page they moved must not fall out of the system. Dot-directories are
+    skipped so Obsidian/git internals never look like topics.
+    """
+    topic_dir = settings.topic_path
+    if not topic_dir.is_dir():
+        return
+    for page in sorted(topic_dir.rglob("*.md")):
+        rel = page.relative_to(topic_dir)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        yield page
+
+
+def find_topic_page(topic: str, settings: Settings) -> Path | None:
+    """An existing page for this topic, wherever the owner filed it.
+
+    Matched by slug, so `Topics/Health/lower-back.md` still answers to the
+    topic `lower back`. If hand-filing has produced more than one candidate we
+    take the shallowest, then the alphabetically first, so repeated runs keep
+    choosing the same page instead of alternating between them.
+    """
+    slug = topic_slug(topic)
+    matches = [page for page in iter_topic_pages(settings) if page.stem == slug]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        logger.warning(
+            "Topic %r has %d pages (%s); appending to the shallowest.",
+            topic,
+            len(matches),
+            ", ".join(str(p.relative_to(settings.topic_path)) for p in matches),
+        )
+    return min(matches, key=lambda p: (len(p.relative_to(settings.topic_path).parts), str(p)))
+
+
 def topic_page_path(topic: str, settings: Settings) -> Path:
-    """Where a topic's page lives. One flat file per topic (C7)."""
+    """Where a topic's page lives: where it already is, else flat (C7)."""
+    existing = find_topic_page(topic, settings)
+    if existing is not None:
+        return existing
     return settings.topic_path / f"{topic_slug(topic)}.md"
 
 
@@ -213,7 +258,7 @@ def topic_counts(settings: Settings) -> dict[str, int]:
     topic_dir = settings.topic_path
     if topic_dir.is_dir():
         known_slugs = {topic_slug(t) for t in counts}
-        for page in topic_dir.glob("*.md"):
+        for page in iter_topic_pages(settings):
             if page.stem in known_slugs:
                 continue  # already represented under its canonical name
             counts.setdefault(_topic_name_from_page(page), 0)
@@ -323,7 +368,9 @@ __all__ = [
     "append_to_topic",
     "atom_id",
     "file_atoms",
+    "find_topic_page",
     "iter_index",
+    "iter_topic_pages",
     "known_topics",
     "search",
     "topic_counts",

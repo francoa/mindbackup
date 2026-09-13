@@ -121,6 +121,13 @@ works from the phone.
 Obsidian comes back with it. A page too long for one Telegram message is split
 across several rather than truncated.
 
+New topic pages are written flat into `Topics/`, and grouping is meant to come
+from `[[wikilinks]]` rather than a directory tree. But folders are respected if
+you make them: drag `lower-back.md` into `Topics/Health/` and new atoms keep
+appending to it there — the topic stays known to the extractor instead of
+reappearing as a duplicate flat page. The same holds for memos moved into
+subfolders of `Memos/`.
+
 ## Docker Design Notes
 
 - Multi-stage: deps resolve from `uv.lock` in the builder, only the finished

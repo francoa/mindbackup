@@ -57,6 +57,22 @@ def _unique_path(directory: Path, stem: str) -> Path:
     raise VaultWriteError(f"Could not find a free filename for {stem!r} in {directory}.")
 
 
+def iter_memos(memo_dir: Path) -> list[Path]:
+    """Every memo under `memo_dir`, at any depth, sorted by path.
+
+    New memos are always written flat, but the owner may group old ones into
+    folders in Obsidian; a moved memo must stay visible to `extract`, `ask`
+    and the counters rather than quietly leaving the corpus.
+    """
+    if not memo_dir.is_dir():
+        return []
+    return sorted(
+        page
+        for page in memo_dir.rglob("*.md")
+        if not any(part.startswith(".") for part in page.relative_to(memo_dir).parts)
+    )
+
+
 def write_memo(
     transcript: str,
     memo_date: date,

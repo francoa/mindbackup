@@ -190,16 +190,21 @@ def cmd_bot(args: argparse.Namespace, settings: Settings) -> int:
 
 def _memo_targets(args: argparse.Namespace, settings: Settings) -> list[Path]:
     """Which memos to extract: an explicit path, or the whole Memos folder."""
+    from mindbackup.vault import iter_memos
+
     if args.memo:
         path = Path(args.memo).expanduser()
         if not path.is_absolute() and not path.exists():
             path = settings.memo_path / args.memo
         if not path.is_file():
+            # Named a memo that has been filed into a subfolder by hand.
+            wanted = Path(args.memo).name
+            moved = [m for m in iter_memos(settings.memo_path) if m.name == wanted]
+            if len(moved) == 1:
+                return moved
             raise FileNotFoundError(path)
         return [path]
-    if not settings.memo_path.is_dir():
-        return []
-    return sorted(settings.memo_path.glob("*.md"))
+    return iter_memos(settings.memo_path)
 
 
 def _render_atom(atom, prefix: str = "   ") -> str:

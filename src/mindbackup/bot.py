@@ -51,6 +51,7 @@ from mindbackup.review import (
     review_keyboard,
 )
 from mindbackup.topics import known_topics, topic_counts
+from mindbackup.vault import iter_memos
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +84,10 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     memo_path = settings.memo_path
     today = local_today(settings)
     try:
-        total = len(list(memo_path.glob("*.md"))) if memo_path.is_dir() else 0
-        today_count = (
-            len(list(memo_path.glob(f"{today.isoformat()}*.md")))
-            if memo_path.is_dir()
-            else 0
-        )
+        memos = iter_memos(memo_path)
+        total = len(memos)
+        today_prefix = today.isoformat()
+        today_count = sum(1 for memo in memos if memo.name.startswith(today_prefix))
         vault_state = "reachable" if memo_path.parent.is_dir() else "MISSING"
     except OSError as exc:
         total, today_count, vault_state = 0, 0, f"error: {exc}"
