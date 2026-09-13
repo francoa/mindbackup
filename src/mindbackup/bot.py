@@ -41,7 +41,6 @@ from mindbackup.config import Settings, load_settings
 from mindbackup.extract import LLMError, extract_atoms
 from mindbackup.pipeline import TranscriptionError, VaultWriteError, ingest_audio, local_today
 from mindbackup.review import (
-    CB_APPROVE,
     CB_DISCARD,
     CB_EDIT,
     PendingReview,
@@ -239,7 +238,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if len(preview) > MAX_PREVIEW_CHARS:
         preview = preview[:MAX_PREVIEW_CHARS].rsplit(" ", 1)[0] + "…"
 
-    await status.edit_text(f"✅ Saved as *{result.memo.path.name}*\n\n{preview}", parse_mode="Markdown")
+    await status.edit_text(
+        f"✅ Saved as *{result.memo.path.name}*\n\n{preview}", parse_mode="Markdown"
+    )
 
     # The memo is now safe on disk. Everything past this point is a bonus that
     # must never be able to undo that (spec C4).
@@ -276,8 +277,7 @@ async def _offer_extraction(
     except LLMError as exc:
         logger.warning("Extraction failed for %s: %s", result.memo.path.name, exc)
         await thinking.edit_text(
-            f"⚠️ Saved, but extraction failed: {exc}\n"
-            f"Run `mindbackup extract` later to retry.",
+            f"⚠️ Saved, but extraction failed: {exc}\nRun `mindbackup extract` later to retry.",
             parse_mode="Markdown",
         )
         return
@@ -367,9 +367,7 @@ async def handle_other(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = update.effective_message
     if message is None:
         return
-    await message.reply_text(
-        "Send me a voice note. Text messages aren't saved in Milestone 1."
-    )
+    await message.reply_text("Send me a voice note. Text messages aren't saved in Milestone 1.")
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -393,9 +391,7 @@ def build_application(settings: Settings):
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("get_topic", cmd_get_topic))
     app.add_handler(
-        MessageHandler(
-            filters.VOICE | filters.AUDIO | filters.Document.AUDIO, handle_voice
-        )
+        MessageHandler(filters.VOICE | filters.AUDIO | filters.Document.AUDIO, handle_voice)
     )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_other))
     app.add_handler(CallbackQueryHandler(handle_review_button, pattern=r"^mb:"))

@@ -64,8 +64,7 @@ def normalise(text: str, *, strip_accents: bool = False) -> str:
     text = _SPACE.sub(" ", text).strip()
     if strip_accents:
         text = "".join(
-            c for c in unicodedata.normalize("NFD", text)
-            if unicodedata.category(c) != "Mn"
+            c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
         )
     return text
 
@@ -78,11 +77,13 @@ def levenshtein(a: list[str], b: list[str]) -> int:
     for i, token_a in enumerate(a, 1):
         current = [i]
         for j, token_b in enumerate(b, 1):
-            current.append(min(
-                previous[j] + 1,          # deletion
-                current[j - 1] + 1,       # insertion
-                previous[j - 1] + (token_a != token_b),  # substitution
-            ))
+            current.append(
+                min(
+                    previous[j] + 1,  # deletion
+                    current[j - 1] + 1,  # insertion
+                    previous[j - 1] + (token_a != token_b),  # substitution
+                )
+            )
         previous = current
     return previous[-1]
 
@@ -139,9 +140,7 @@ def run_model(name: str, *, language: str | None, vocabulary: str | None) -> dic
         "transcribe_s": round(transcribe_s, 1),
         "realtime_factor": round(transcribe_s / 80.9, 2),
         "wer": round(word_error_rate(reference, text), 4),
-        "wer_no_accents": round(
-            word_error_rate(reference, text, strip_accents=True), 4
-        ),
+        "wer_no_accents": round(word_error_rate(reference, text, strip_accents=True), 4),
         "term_recall": round(recall, 3),
         "missing_terms": missing,
         "chars": len(text),
@@ -161,8 +160,10 @@ def main() -> int:
     results = json.loads(RESULTS.read_text()) if RESULTS.exists() else []
 
     for name in args.models:
-        label = f"{name} lang={'auto' if args.auto_language else args.language} " \
-                f"vocab={not args.no_vocab}{' ' + args.tag if args.tag else ''}"
+        label = (
+            f"{name} lang={'auto' if args.auto_language else args.language} "
+            f"vocab={not args.no_vocab}{' ' + args.tag if args.tag else ''}"
+        )
         print(f"--- {label}", flush=True)
         try:
             row = run_model(
@@ -174,16 +175,23 @@ def main() -> int:
             print(f"    FAILED: {type(exc).__name__}: {exc}", flush=True)
             continue
         row["tag"] = args.tag
-        results = [r for r in results
-                   if not (r["model"] == row["model"]
-                           and r["language"] == row["language"]
-                           and r["vocabulary"] == row["vocabulary"]
-                           and r.get("tag", "") == row["tag"])]
+        results = [
+            r
+            for r in results
+            if not (
+                r["model"] == row["model"]
+                and r["language"] == row["language"]
+                and r["vocabulary"] == row["vocabulary"]
+                and r.get("tag", "") == row["tag"]
+            )
+        ]
         results.append(row)
         RESULTS.write_text(json.dumps(results, ensure_ascii=False, indent=2))
-        print(f"    WER {row['wer']:.3f} | recall {row['term_recall']:.2f} | "
-              f"{row['transcribe_s']}s ({row['realtime_factor']}x realtime)",
-              flush=True)
+        print(
+            f"    WER {row['wer']:.3f} | recall {row['term_recall']:.2f} | "
+            f"{row['transcribe_s']}s ({row['realtime_factor']}x realtime)",
+            flush=True,
+        )
     return 0
 
 

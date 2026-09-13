@@ -44,7 +44,6 @@ def build_prompt(vocabulary: str) -> str | None:
     return hint
 
 
-
 def transcribe(audio_path: Path, settings: Settings) -> Transcript:
     """Transcribe audio using the configured provider."""
     if not audio_path.is_file():

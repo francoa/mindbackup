@@ -7,7 +7,6 @@ from telegram.ext import ContextTypes
 from mindbackup.bot_module.utils import get_settings
 from mindbackup.config import Settings
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -27,6 +26,7 @@ async def _reject(update: Update) -> None:
         await update.effective_message.reply_text(
             "This is a private bot and you're not on its allowlist."
         )
+
 
 def authorizer(func):
     @functools.wraps(func)

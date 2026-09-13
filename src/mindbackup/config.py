@@ -61,9 +61,10 @@ def _get_from_secrets(secret_name: str, fallback_env_var: str = "") -> str:
     secret_path = Path(f"/run/secrets/{secret_name}")
     if secret_path.exists():
         return secret_path.read_text().strip()
-    
+
     # Fallback to env var for local non-docker testing
     return _get(fallback_env_var)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -152,9 +153,7 @@ def load_settings() -> Settings:
     """Build Settings from the environment. Raises ConfigError on bad input."""
     vault_raw = _get("OBSIDIAN_VAULT_PATH")
     if not vault_raw:
-        raise ConfigError(
-            "OBSIDIAN_VAULT_PATH is not set. Point it at your Obsidian vault."
-        )
+        raise ConfigError("OBSIDIAN_VAULT_PATH is not set. Point it at your Obsidian vault.")
     vault_path = Path(vault_raw).expanduser()
 
     provider = (_get("MINDBACKUP_STT_PROVIDER") or "local").lower()
@@ -186,9 +185,9 @@ def load_settings() -> Settings:
         audio_archive=Path(archive_raw).expanduser() if archive_raw else None,
         timezone=_get("MINDBACKUP_TIMEZONE") or None,
         topic_dir=_get("MINDBACKUP_TOPIC_DIR") or "Topics",
-        llm_base_url=(
-            _get("MINDBACKUP_LLM_BASE_URL") or "https://api.anthropic.com/v1"
-        ).rstrip("/"),
+        llm_base_url=(_get("MINDBACKUP_LLM_BASE_URL") or "https://api.anthropic.com/v1").rstrip(
+            "/"
+        ),
         llm_model=_get("MINDBACKUP_LLM_MODEL"),
         llm_api_key=_get_from_secrets("llm_api_key", "MINDBACKUP_LLM_API_KEY"),
         llm_timeout=llm_timeout,

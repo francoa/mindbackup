@@ -34,15 +34,7 @@ class Memo:
 def render_memo(transcript: str, memo_date: date, source: str = "telegram") -> str:
     """Render the markdown document. Minimal frontmatter, then raw transcript."""
     body = transcript.strip()
-    return (
-        "---\n"
-        f"date: {memo_date.isoformat()}\n"
-        "type: memo\n"
-        f"source: {source}\n"
-        "---\n"
-        "\n"
-        f"{body}\n"
-    )
+    return f"---\ndate: {memo_date.isoformat()}\ntype: memo\nsource: {source}\n---\n\n{body}\n"
 
 
 def _unique_path(directory: Path, stem: str) -> Path:

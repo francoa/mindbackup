@@ -29,22 +29,42 @@ REPLIES = {
     "2026-09-03": {
         "summary": "Search is bad; needs grip.",
         "atoms": [
-            {"text": "voice-mind-backup necesita mejor búsqueda que grep.",
-             "kind": "todo", "topics": ["voice-mind-backup", "search"], "confidence": 0.9},
-            {"text": "Comprar grip nuevo para la pala.",
-             "kind": "todo", "topics": ["padel"], "confidence": 0.95},
+            {
+                "text": "voice-mind-backup necesita mejor búsqueda que grep.",
+                "kind": "todo",
+                "topics": ["voice-mind-backup", "search"],
+                "confidence": 0.9,
+            },
+            {
+                "text": "Comprar grip nuevo para la pala.",
+                "kind": "todo",
+                "topics": ["padel"],
+                "confidence": 0.95,
+            },
         ],
     },
     "2026-09-05": {
         "summary": "Back pain and a decision about topics.",
         "atoms": [
-            {"text": "Decidido: usar topic pages en vez de una taxonomía fija.",
-             "kind": "decision", "topics": ["voice-mind-backup"], "confidence": 0.9},
-            {"text": "El estiramiento de isquiotibiales alivia la lumbar.",
-             "kind": "fact", "topics": ["lower back"], "confidence": 0.9},
-            {"text": "Preguntarle a él sobre aquello.",
-             "kind": "todo", "topics": [], "confidence": 0.2,
-             "ambiguity": "Who is 'él' and what is 'aquello'?"},
+            {
+                "text": "Decidido: usar topic pages en vez de una taxonomía fija.",
+                "kind": "decision",
+                "topics": ["voice-mind-backup"],
+                "confidence": 0.9,
+            },
+            {
+                "text": "El estiramiento de isquiotibiales alivia la lumbar.",
+                "kind": "fact",
+                "topics": ["lower back"],
+                "confidence": 0.9,
+            },
+            {
+                "text": "Preguntarle a él sobre aquello.",
+                "kind": "todo",
+                "topics": [],
+                "confidence": 0.2,
+                "ambiguity": "Who is 'él' and what is 'aquello'?",
+            },
         ],
     },
 }
@@ -90,13 +110,15 @@ try:
     write_memo(
         "Vale, para este proyecto necesito arreglar la búsqueda, que es un grep "
         "y no encuentra nada. Y comprar grip para la pala.",
-        date(2026, 9, 3), settings.memo_path,
+        date(2026, 9, 3),
+        settings.memo_path,
     )
     write_memo(
         "Estuve pensando y decidí usar topic pages en vez de taxonomía. "
         "También el estiramiento de isquios me alivia la lumbar. "
         "Ah, y preguntarle a él sobre aquello.",
-        date(2026, 9, 5), settings.memo_path,
+        date(2026, 9, 5),
+        settings.memo_path,
     )
 
     failures = []

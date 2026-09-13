@@ -42,3 +42,12 @@ bash-root:
 
 test:
 	python3 -m pytest -q .
+
+lint:
+	uv run --extra dev ruff check src tests
+
+# Not checked by `just lint`: the repo is not ruff-format clean yet, and
+# running this reformats ~18 files in one go. Opt in deliberately.
+format:
+	uv run --extra dev ruff format src tests
+	uv run --extra dev ruff check --fix src tests

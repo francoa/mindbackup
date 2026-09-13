@@ -173,7 +173,9 @@ def test_atoms_with_no_topic_land_on_the_default_page(settings, fake_llm):
     assert untopiced[0].topics == []
 
     pipeline.extract_memo(memo.path, settings)
-    bullets = [l for l in page.read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
+    bullets = [
+        line for line in page.read_text(encoding="utf-8").splitlines() if line.startswith("- ")
+    ]
     assert len(bullets) == 1, "re-extraction must not duplicate the bullet"
 
 
@@ -183,7 +185,9 @@ def test_refiling_is_idempotent(settings, fake_llm):
     pipeline.extract_memo(memo.path, settings)
 
     page = settings.topic_path / "padel.md"
-    bullets = [l for l in page.read_text(encoding="utf-8").splitlines() if l.startswith("- ")]
+    bullets = [
+        line for line in page.read_text(encoding="utf-8").splitlines() if line.startswith("- ")
+    ]
     assert len(bullets) == 1, "re-extraction must not duplicate bullets"
 
     assert sum(1 for _ in topics.iter_index(settings)) == 3, "index must not duplicate"
@@ -295,9 +299,7 @@ def test_known_topics_recovers_names_from_orphan_pages(settings):
 
 def _write_topic_page(path: Path, topic: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"---\ntype: topic\ntopic: {topic}\n---\n\n# {topic}\n", encoding="utf-8"
-    )
+    path.write_text(f"---\ntype: topic\ntopic: {topic}\n---\n\n# {topic}\n", encoding="utf-8")
 
 
 def test_topic_page_in_a_subfolder_is_still_known(settings):

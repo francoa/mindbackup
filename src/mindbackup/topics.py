@@ -24,10 +24,10 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Iterator
 
 from .config import Settings
 from .extract import Atom, normalise_topic
@@ -64,7 +64,7 @@ class StoredAtom:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "StoredAtom":
+    def from_dict(cls, data: dict) -> StoredAtom:
         return cls(
             id=str(data.get("id", "")),
             text=str(data.get("text", "")),
@@ -78,7 +78,7 @@ class StoredAtom:
 
 def atom_id(memo_name: str, text: str) -> str:
     """Stable short id for (memo, atom text). Survives re-extraction."""
-    digest = hashlib.sha256(f"{memo_name}\x00{text.strip()}".encode("utf-8"))
+    digest = hashlib.sha256(f"{memo_name}\x00{text.strip()}".encode())
     return digest.hexdigest()[:10]
 
 
@@ -111,13 +111,7 @@ def _render_bullet(stored: StoredAtom) -> str:
 
 
 def _new_topic_page(topic: str) -> str:
-    return (
-        "---\n"
-        "type: topic\n"
-        f"topic: {topic}\n"
-        "---\n"
-        f"\n# {topic}\n\n"
-    )
+    return f"---\ntype: topic\ntopic: {topic}\n---\n\n# {topic}\n\n"
 
 
 def iter_topic_pages(settings: Settings) -> Iterator[Path]:

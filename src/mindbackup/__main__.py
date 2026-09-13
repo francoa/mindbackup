@@ -80,12 +80,19 @@ def cmd_doctor(args: argparse.Namespace, settings: Settings) -> int:
         check(True, f"memo folder is writable: {memo_dir}")
 
     out("\nTranscription")
-    out(f"   provider: {settings.stt_provider}  model: {settings.stt_model}  "
-        f"language: {settings.stt_language or 'auto-detect'}")
+    out(
+        f"   provider: {settings.stt_provider}  model: {settings.stt_model}  "
+        f"language: {settings.stt_language or 'auto-detect'}"
+    )
     if settings.vocabulary:
         out(f"   vocabulary hint: {settings.vocabulary[:70]}")
     else:
-        check(False, "vocabulary hint set", "MINDBACKUP_VOCABULARY improves jargon accuracy", fatal=False)
+        check(
+            False,
+            "vocabulary hint set",
+            "MINDBACKUP_VOCABULARY improves jargon accuracy",
+            fatal=False,
+        )
     try:
         import faster_whisper  # noqa: F401
 
@@ -166,9 +173,7 @@ def cmd_ingest(args: argparse.Namespace, settings: Settings) -> int:
             return 1
 
     try:
-        result = ingest_audio(
-            audio_path, settings, recorded_at=recorded_at, source=args.source
-        )
+        result = ingest_audio(audio_path, settings, recorded_at=recorded_at, source=args.source)
     except (TranscriptionError, VaultWriteError) as exc:
         logger.debug("Ingest failed", exc_info=True)
         err(f"{BAD} {exc}")

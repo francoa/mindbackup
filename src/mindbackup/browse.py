@@ -108,18 +108,14 @@ def topics_keyboard(topics: list[str], page: int = 0, counts: dict | None = None
     for topic in page_slice(topics, page):
         count = (counts or {}).get(topic)
         label = topic if count is None else f"{topic} ({count})"
-        rows.append(
-            [InlineKeyboardButton(label, callback_data=f"{CB_TOPIC}{topic_token(topic)}")]
-        )
+        rows.append([InlineKeyboardButton(label, callback_data=f"{CB_TOPIC}{topic_token(topic)}")])
 
     total_pages = page_count(topics)
     if total_pages > 1:
         nav = []
         if page > 0:
             nav.append(InlineKeyboardButton("◀️", callback_data=f"{CB_PAGE}{page - 1}"))
-        nav.append(
-            InlineKeyboardButton(f"{page + 1}/{total_pages}", callback_data=CB_LIST)
-        )
+        nav.append(InlineKeyboardButton(f"{page + 1}/{total_pages}", callback_data=CB_LIST))
         if page < total_pages - 1:
             nav.append(InlineKeyboardButton("▶️", callback_data=f"{CB_PAGE}{page + 1}"))
         rows.append(nav)
@@ -130,9 +126,7 @@ def topics_keyboard(topics: list[str], page: int = 0, counts: dict | None = None
 def back_keyboard():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("◀️ All topics", callback_data=CB_LIST)]]
-    )
+    return InlineKeyboardMarkup([[InlineKeyboardButton("◀️ All topics", callback_data=CB_LIST)]])
 
 
 def _strip_page_furniture(text: str) -> str:

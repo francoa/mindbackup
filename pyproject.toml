@@ -10,7 +10,7 @@ dependencies = [
 [project.optional-dependencies]
 local = ["faster-whisper>=1.0"]
 cloud = ["httpx>=0.27"]
-dev = ["pytest>=8.0", "pyyaml>=6.0"]
+dev = ["pytest>=8.0", "pyyaml>=6.0", "ruff>=0.6"]
 
 [project.scripts]
 mindbackup = "mindbackup.__main__:main"
@@ -24,6 +24,21 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+# The code was written to ~100 cols; anything narrower reflows most of the
+# repo for no reason.
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, pyupgrade, bugbear, comprehensions.
+select = ["E", "F", "I", "UP", "B", "C4"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests insert src/ on sys.path before importing the package, so their imports
+# legitimately sit below other statements.
+"tests/*" = ["E402"]
 
 [tool.uv]
 # Supply-chain cooling-off: ignore artifacts uploaded in the last 7 days, so a

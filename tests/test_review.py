@@ -19,8 +19,6 @@ from mindbackup import extract as extract_mod
 from mindbackup.config import Settings
 from mindbackup.extract import Atom, Extraction
 from mindbackup.review import (
-    CB_APPROVE,
-    CB_DISCARD,
     PendingReview,
     apply_review,
     render_filed,
@@ -44,8 +42,9 @@ def _atoms() -> list[Atom]:
     return [
         Atom(text="Fix search.", kind="todo", topics=["voice-mind-backup"], confidence=0.9),
         Atom(text="Buy grip.", kind="todo", topics=["padel"], confidence=0.9),
-        Atom(text="Talk to him.", kind="todo", topics=[], confidence=0.2,
-             ambiguity="Who is 'him'?"),
+        Atom(
+            text="Talk to him.", kind="todo", topics=[], confidence=0.2, ambiguity="Who is 'him'?"
+        ),
     ]
 
 

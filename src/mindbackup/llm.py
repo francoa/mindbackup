@@ -97,9 +97,14 @@ def complete(
                 raise LLMError(f"Unexpected LLM response shape: {str(data)[:300]}") from exc
 
         if attempt < MAX_ATTEMPTS:
-            delay = 2 ** attempt
-            logger.warning("LLM attempt %d/%d failed (%s); retrying in %ds",
-                           attempt, MAX_ATTEMPTS, last_error, delay)
+            delay = 2**attempt
+            logger.warning(
+                "LLM attempt %d/%d failed (%s); retrying in %ds",
+                attempt,
+                MAX_ATTEMPTS,
+                last_error,
+                delay,
+            )
             time.sleep(delay)
 
     raise LLMError(f"LLM failed after {MAX_ATTEMPTS} attempts. {last_error}")
@@ -120,9 +125,7 @@ def complete_json(
     max_tokens: int = 4000,
 ) -> Any:
     """Chat completion parsed as JSON, tolerating fences and prose padding."""
-    raw = complete(
-        settings, system, user, temperature=temperature, max_tokens=max_tokens
-    )
+    raw = complete(settings, system, user, temperature=temperature, max_tokens=max_tokens)
     candidate = _strip_code_fence(raw)
     try:
         return json.loads(candidate)

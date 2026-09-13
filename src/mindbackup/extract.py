@@ -89,15 +89,13 @@ class Atom:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Atom":
+    def from_dict(cls, data: dict[str, Any]) -> Atom:
         return cls(
             text=str(data.get("text", "")).strip(),
             kind=_clean_kind(data.get("kind")),
             topics=_clean_topics(data.get("topics")),
             confidence=_clean_confidence(data.get("confidence")),
-            ambiguity=(str(data["ambiguity"]).strip() or None)
-            if data.get("ambiguity")
-            else None,
+            ambiguity=(str(data["ambiguity"]).strip() or None) if data.get("ambiguity") else None,
         )
 
     def get_text(self) -> str:
@@ -120,7 +118,7 @@ class Extraction:
         return {"summary": self.summary, "atoms": [a.to_dict() for a in self.atoms]}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Extraction":
+    def from_dict(cls, data: dict[str, Any]) -> Extraction:
         raw_atoms = data.get("atoms") or []
         atoms = [Atom.from_dict(a) for a in raw_atoms if isinstance(a, dict)]
         return cls(
@@ -168,13 +166,8 @@ def build_user_prompt(transcript: str, known_topics: list[str]) -> str:
         # the raw transcript remains complete in the vault.
         text = text[:MAX_TRANSCRIPT_CHARS] + "\n[transcript truncated]"
 
-    topics_block = (
-        "\n".join(f"- {t}" for t in known_topics) if known_topics else "(none yet)"
-    )
-    return (
-        f"KNOWN TOPICS (reuse these names when they fit):\n{topics_block}\n\n"
-        f"TRANSCRIPT:\n{text}"
-    )
+    topics_block = "\n".join(f"- {t}" for t in known_topics) if known_topics else "(none yet)"
+    return f"KNOWN TOPICS (reuse these names when they fit):\n{topics_block}\n\nTRANSCRIPT:\n{text}"
 
 
 def extract_atoms(

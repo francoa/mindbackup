@@ -64,7 +64,7 @@ def test_token_round_trips_through_the_topic_list():
 def test_token_stays_inside_telegram_callback_limit():
     huge = "a very long topic name " * 10
     token = topic_token(huge)
-    assert len(f"{CB_TOPIC}{token}".encode("utf-8")) <= 64
+    assert len(f"{CB_TOPIC}{token}".encode()) <= 64
 
 
 def test_long_topic_token_is_deterministic():
@@ -204,11 +204,7 @@ def test_get_topic_lists_every_topic(filled):
     asyncio.run(bot_mod.cmd_get_topic(_update(message), _context(filled)))
 
     assert "2 topic(s)" in message.texts[-1]
-    labels = [
-        button.text
-        for row in message.markups[-1].inline_keyboard
-        for button in row
-    ]
+    labels = [button.text for row in message.markups[-1].inline_keyboard for button in row]
     assert any(label.startswith("voice-mind-backup") for label in labels)
     assert any(label.startswith("padel") for label in labels)
 

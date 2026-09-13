@@ -25,10 +25,7 @@ PEAK_RSS_MB = {"tiny": 250, "base": 445, "small": 893, "medium": 2570, "large-v3
 
 
 def _deaccent(text: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", text)
-        if unicodedata.category(c) != "Mn"
-    )
+    return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
 
 
 # --- scoring logic --------------------------------------------------------
@@ -112,14 +109,10 @@ def test_vocabulary_constant_is_covered_by_shipped_default():
     for line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
         if line.startswith("MINDBACKUP_VOCABULARY="):
             shipped = {
-                term.strip().lower()
-                for term in line.split("=", 1)[1].split(",")
-                if term.strip()
+                term.strip().lower() for term in line.split("=", 1)[1].split(",") if term.strip()
             }
             scored = {
-                term.strip().rstrip(".").lower()
-                for term in bm.VOCAB.split(",")
-                if term.strip()
+                term.strip().rstrip(".").lower() for term in bm.VOCAB.split(",") if term.strip()
             }
             assert scored <= shipped, f"benchmark scores unshipped terms: {scored - shipped}"
             return

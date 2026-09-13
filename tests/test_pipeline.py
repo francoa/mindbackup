@@ -17,10 +17,8 @@ from mindbackup.config import (  # noqa: E402
     _parse_allowed_users,
     load_settings,
 )
-
 from mindbackup.pipeline import archive_audio, resolve_memo_date  # noqa: E402
 from mindbackup.stt import build_prompt  # noqa: E402
-
 from mindbackup.vault import (  # noqa: E402
     VaultWriteError,
     render_memo,
@@ -29,7 +27,7 @@ from mindbackup.vault import (  # noqa: E402
 
 
 def settings_for(tmp_path: Path, **overrides) -> Settings:
-    base: dict = dict(vault_path=tmp_path, memo_dir="Memos", timezone="Europe/Madrid")
+    base: dict = {"vault_path": tmp_path, "memo_dir": "Memos", "timezone": "Europe/Madrid"}
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
 
@@ -39,9 +37,7 @@ def settings_for(tmp_path: Path, **overrides) -> Settings:
 
 def test_render_has_exact_m1_frontmatter():
     out = render_memo("hello world", date(2026, 9, 4))
-    assert out.startswith(
-        "---\ndate: 2026-09-04\ntype: memo\nsource: telegram\n---\n\n"
-    )
+    assert out.startswith("---\ndate: 2026-09-04\ntype: memo\nsource: telegram\n---\n\n")
     assert out.endswith("hello world\n")
 
 
@@ -211,7 +207,6 @@ def test_shipped_env_example_vocabulary_is_punctuated():
             break
     else:
         pytest.fail("MINDBACKUP_VOCABULARY missing from .env.example")
-
 
 
 # --- regressions ----------------------------------------------------------

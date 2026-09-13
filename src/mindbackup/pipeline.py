@@ -193,7 +193,8 @@ def extract_memo(
         # classification is worse than filing none (spec C6).
         # TODO: Atoms that need clarification are going to be recorded for the moment
         #   I'd rather have these being recorded with a warning than not recorded at all
-        # Restore this when appropriate: confident = [a for a in extraction.atoms if not a.needs_clarification]
+        # Restore this when appropriate:
+        #   confident = [a for a in extraction.atoms if not a.needs_clarification]
         filed = file_atoms(
             extraction.atoms,
             memo_path.stem,
