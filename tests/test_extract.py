@@ -135,6 +135,26 @@ def test_extract_memo_files_every_atom_flagging_the_ambiguous_one(settings, fake
     assert "^mb-" in content, "block ref needed for idempotent re-runs"
 
 
+def test_bullet_shows_only_the_memo_link():
+    """The bullet carries the sentence, one link home, and the block ref.
+
+    No bare date and no audio filename: both are just the memo name repeated,
+    and the atom index already holds them for `ask`.
+    """
+    stored = topics.StoredAtom(
+        id="4a9d62c48d",
+        text="La búsqueda es mejor que grep.",
+        kind="fact",
+        topics=["voice-mind-backup"],
+        memo="2026-09-03_2",
+        memo_date="2026-09-03",
+        audio="2026-09-03_2.ogg",
+    )
+    assert topics._render_bullet(stored) == (
+        "- La búsqueda es mejor que grep. — [[2026-09-03_2]] ^mb-4a9d62c48d"
+    )
+
+
 def test_atoms_with_no_topic_land_on_the_default_page(settings, fake_llm):
     """An atom the model could not classify still has to surface in Obsidian."""
     memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)

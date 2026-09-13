@@ -98,17 +98,23 @@ def test_apply_review_files_resolved_ambiguous_atoms(settings):
 
 
 def test_apply_review_records_audio_backref(settings):
+    """The audio backref lives in the index, not on the topic page.
+
+    The page shows only the memo link; the recording is named after the memo,
+    so printing it there was the link repeated.
+    """
     review = PendingReview(
         memo_name="2026-09-06",
         memo_date="2026-09-06",
         atoms=[Atom(text="Fix search.", topics=["voice-mind-backup"])],
-        audio="20260906T101500-voice.ogg",
+        audio="2026-09-06.ogg",
     )
     filed = apply_review(review, settings)
 
-    assert filed[0].audio == "20260906T101500-voice.ogg", "must link back to the audio"
+    assert filed[0].audio == "2026-09-06.ogg", "must link back to the audio"
     page = (settings.topic_path / "voice-mind-backup.md").read_text(encoding="utf-8")
-    assert "20260906T101500-voice.ogg" in page
+    assert ".ogg" not in page
+    assert "[[2026-09-06]]" in page
 
 
 def test_filed_atoms_are_searchable(settings):

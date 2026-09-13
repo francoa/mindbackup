@@ -100,11 +100,14 @@ def _existing_block_ids(path: Path) -> set[str]:
 
 
 def _render_bullet(stored: StoredAtom) -> str:
-    """One topic-page bullet: the sentence, its date, and the way back."""
+    """One topic-page bullet: the sentence and the way back to the memo.
+
+    The memo link is the only provenance shown. The date is already the memo's
+    name, and the archived recording is named after the memo too, so both would
+    just be the link repeated; the atom index keeps them either way.
+    """
     kind = f"**{stored.kind}** " if stored.kind != "fact" else ""
-    memo_link = f"[[{stored.memo}]]"
-    audio = f" · `{stored.audio}`" if stored.audio else ""
-    return f"- {kind}{stored.text} — {stored.memo_date} {memo_link}{audio} ^mb-{stored.id}"
+    return f"- {kind}{stored.text} — [[{stored.memo}]] ^mb-{stored.id}"
 
 
 def _new_topic_page(topic: str) -> str:
