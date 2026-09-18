@@ -1,6 +1,6 @@
 # Bot confirmation parity
 
-Status: proposed
+Status: implemented (2026-09-18)
 Date: 2026-09-18
 Follows: `2026-09-17_confirmation-stage.md`
 
