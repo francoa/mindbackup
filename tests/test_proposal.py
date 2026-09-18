@@ -85,17 +85,6 @@ def test_commit_files_nothing_when_nothing_is_approved(settings):
 # --- what each policy files ------------------------------------------------
 
 
-def test_approve_confident_holds_back_the_unclear_atom(settings):
-    """The bot's one-tap policy. Was: `apply_review` filing `review.confident`."""
-    proposal = _proposal()
-    proposal.approve_confident()
-    filed = proposal.commit(settings)
-
-    assert len(filed) == 2, "the ambiguous atom must not be filed unresolved"
-    assert {f.text for f in filed} == {"Fix search.", "Buy grip."}
-    assert [index for index, _ in proposal.pending()] == [2], "it stays pending, not discarded"
-
-
 def test_approve_all_files_the_unclear_atom_too(settings):
     """The batch CLI's policy: no one to ask, so file the lot — explicitly."""
     proposal = _proposal()
@@ -120,7 +109,8 @@ def test_reject_keeps_an_atom_out_of_the_vault(settings):
 def test_reassign_resolves_the_ambiguity_and_files_it(settings):
     """Was: `review.resolved[2] = "coach"` — the user answering "who is him?"."""
     proposal = _proposal()
-    proposal.approve_confident()
+    proposal.approve(0)
+    proposal.approve(1)
     proposal.reassign(2, ["coach"])
 
     filed = proposal.commit(settings)
@@ -178,7 +168,7 @@ def test_commit_records_the_audio_backref(settings):
 
 def test_committed_atoms_are_searchable(settings):
     proposal = _proposal()
-    proposal.approve_confident()
+    proposal.approve_all()
     proposal.commit(settings)
 
     assert len(search(settings, "grip")) == 1
@@ -187,7 +177,7 @@ def test_committed_atoms_are_searchable(settings):
 def test_a_proposal_without_a_date_still_files(settings):
     """A memo whose name carries no date must not block filing."""
     proposal = _proposal(memo_date="")
-    proposal.approve_confident()
+    proposal.approve_all()
     filed = proposal.commit(settings)
 
     assert filed[0].memo_date == date.today().isoformat()

@@ -124,16 +124,6 @@ class Proposal:
         for index, _ in self.pending():
             self.approve(index)
 
-    def approve_confident(self) -> None:
-        """Approve what the model was sure of; leave the rest pending.
-
-        The bot's one-tap policy: filing a wrong classification is worse than
-        filing none (spec C6), so an unclear atom waits for a human instead.
-        """
-        for index, atom in self.pending():
-            if not atom.needs_clarification:
-                self.approve(index)
-
     def reject(self, index: int) -> None:
         self._decide(index, Decision(Verdict.REJECT))
 

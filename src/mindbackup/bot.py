@@ -47,7 +47,9 @@ from mindbackup.pipeline import (
     propose_from_transcript,
 )
 from mindbackup.review import (
+    CB_APPROVE,
     CB_DISCARD,
+    CB_REVIEW,
     render_filed,
     render_review,
     review_keyboard,
@@ -300,9 +302,9 @@ async def _offer_extraction(
         return
 
     sent = await thinking.edit_text(
-        render_review(proposal.extraction, result.memo.path.name),
+        render_review(proposal),
         parse_mode="Markdown",
-        reply_markup=review_keyboard(proposal.extraction),
+        reply_markup=review_keyboard(proposal),
     )
     # edit_text returns True (not a Message) when the edit is a no-op; without
     # a message id there is nothing to key the pending proposal on.
@@ -314,12 +316,11 @@ async def _offer_extraction(
 
 @authorizer
 async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Approve / edit / discard on a pending extraction."""
+    """Approve all / review / discard on a pending extraction."""
     settings = get_settings(context)
     query = update.callback_query
     if query is None:
         return
-    await query.answer()
 
     reviews: dict = context.application.bot_data.setdefault("reviews", {})
     message = query.message
@@ -327,20 +328,34 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if message is None or proposal is None:
         # Bot restarted, or already actioned. Say so rather than failing mutely.
+        await query.answer()
         await query.edit_message_text(
             "⌛ That review expired. Run `mindbackup extract` to redo it.",
             parse_mode="Markdown",
         )
         return
 
+    if query.data == CB_REVIEW:
+        await query.answer("One-by-one review isn't built yet.")
+        return
+
+    if query.data != CB_APPROVE and query.data != CB_DISCARD:
+        # A button from an older build, or one this handler doesn't know. Never
+        # let it fall through to filing.
+        await query.answer("That button doesn't do anything any more.")
+        return
+
+    await query.answer()
+
     if query.data == CB_DISCARD:
         reviews.pop(message.message_id, None)
         await query.edit_message_text("🗑 Discarded. The transcript is still saved.")
         return
 
-    # One tap files what the model was sure of; an unclear atom stays pending
-    # rather than being filed on a guess (spec C6).
-    proposal.approve_confident()
+    # "As they are": everything still pending is approved, unclear atoms with
+    # the model's topics, the same as the batch CLI. Decisions already made are
+    # kept, and nothing is left pending to be lost when the review is dropped.
+    proposal.approve_all()
     try:
         filed = await asyncio.to_thread(proposal.commit, settings)
     except VaultWriteError as exc:

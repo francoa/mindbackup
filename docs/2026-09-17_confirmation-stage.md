@@ -190,12 +190,12 @@ to land in a single sitting.
 
 Two places where the implementation had to differ from the note above.
 
-**`approve_confident()` exists.** The note lists `approve` / `approve_all` /
-`reject` / `reassign`, but the bot's single ✅ button means "file what the model
-was sure of, hold the rest" — `approve_all` would file an unresolved atom on a
-guess. So there are two batch policies, both named: `approve_all()` for the CLI
-(file the lot) and `approve_confident()` for the bot (hold the unclear ones).
-Every atom starts pending, which is what keeps `pending()` and
+**`approve_confident()` existed, and is gone.** It was the bot's ✅ policy
+("file what the model was sure of, hold the rest"), but once the bot dropped
+the proposal after committing, the held atoms were lost rather than held. The
+bot now uses `approve_all()` like the CLI and offers a one-by-one review for
+the unclear atoms; see `2026-09-18_bot-confirmation-parity.md`. Every atom
+still starts pending, which is what keeps `pending()` and
 `needs_clarification()` from being the same query.
 
 **One test in `test_extract.py` changed.** The note predicts it passes

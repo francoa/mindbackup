@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import logging
 
-from .extract import Extraction
+from .proposal import Proposal, Verdict
 
 logger = logging.getLogger(__name__)
 
 MAX_ATOMS_SHOWN = 12
 CB_APPROVE = "mb:ok"
 CB_DISCARD = "mb:no"
+CB_REVIEW = "mb:w"
 
 
 def _escape(text: str) -> str:
@@ -31,44 +32,61 @@ def _escape(text: str) -> str:
     return text.replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
 
 
-def render_review(extraction: Extraction, memo_name: str) -> str:
-    """The message body the user actually reads. Terse: they're on a phone."""
-    atoms = extraction.atoms
+def _hashtags(topics) -> str:
+    return " ".join(f"#{t.replace(' ', '-')}" for t in topics) or "_no topic_"
+
+
+def render_review(proposal: Proposal) -> str:
+    """The overview the user actually reads. Terse: they're on a phone.
+
+    Each atom is marked by where it stands: • pending, ⚠️ pending and unclear,
+    ✅ approved, 🗑 rejected, 🏷 reassigned (with the topics the user chose).
+    """
+    atoms = proposal.atoms
     if not atoms:
-        return f"🧠 Nothing worth extracting from *{_escape(memo_name)}*."
+        return f"🧠 Nothing worth extracting from *{_escape(proposal.memo_name)}*."
 
-    lines = [f"🧠 From *{_escape(memo_name)}*:", ""]
+    lines = [f"🧠 From *{_escape(proposal.memo_name)}*:", ""]
 
-    for index, atom in enumerate(atoms[:MAX_ATOMS_SHOWN], start=1):
-        mark = "⚠️" if atom.needs_clarification else "•"
-        topics = " ".join(f"#{t.replace(' ', '-')}" for t in atom.topics) or "_no topic_"
-        lines.append(f"{mark} {index}. {_escape(atom.text)}")
-        lines.append(f"     {_escape(topics)}")
-        if atom.ambiguity:
+    for index, atom in enumerate(atoms[:MAX_ATOMS_SHOWN]):
+        decision = proposal.decisions.get(index)
+        topics = atom.topics
+        if decision is None:
+            mark = "⚠️" if atom.needs_clarification else "•"
+        elif decision.verdict is Verdict.APPROVE:
+            mark = "✅"
+        elif decision.verdict is Verdict.REJECT:
+            mark = "🗑"
+        else:
+            mark = "🏷"
+            topics = decision.topics
+        lines.append(f"{mark} {index + 1}. {_escape(atom.text)}")
+        lines.append(f"     {_escape(_hashtags(topics))}")
+        if decision is None and atom.ambiguity:
             lines.append(f"     ❓ {_escape(atom.ambiguity)}")
 
     if len(atoms) > MAX_ATOMS_SHOWN:
         lines.append(f"…and {len(atoms) - MAX_ATOMS_SHOWN} more.")
 
-    held = len(extraction.ambiguous)
-    if held:
+    unclear = len(proposal.needs_clarification())
+    if unclear:
         lines.append("")
-        lines.append(f"⚠️ {held} unclear — reply to tell me what you meant.")
+        lines.append(f"⚠️ {unclear} unclear — tap 🔍 to sort them out.")
 
     return "\n".join(lines)
 
 
-def review_keyboard(extraction: Extraction):
-    """Approve / discard. Imported lazily so tests need no telegram."""
+def review_keyboard(proposal: Proposal):
+    """Approve all / review one by one / discard. Imported lazily so tests need no telegram."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    filed = len(extraction.atoms) - len(extraction.ambiguous)
+    # What ✅ would file: everything still pending plus what is already approved.
+    filed = len(proposal.pending()) + len(proposal.approved())
     return InlineKeyboardMarkup(
         [
-            [
-                InlineKeyboardButton(f"✅ File {filed}", callback_data=CB_APPROVE),
-                InlineKeyboardButton("🗑 Discard", callback_data=CB_DISCARD),
-            ]
+            [InlineKeyboardButton(f"✅ Approve all ({filed})", callback_data=CB_APPROVE)],
+            [InlineKeyboardButton("🔍 Review one by one", callback_data=CB_REVIEW)],
+            [InlineKeyboardButton("🗑 Discard", callback_data=CB_DISCARD)],
         ]
     )
 
@@ -88,6 +106,7 @@ def render_filed(filed: list) -> str:
 __all__ = [
     "CB_APPROVE",
     "CB_DISCARD",
+    "CB_REVIEW",
     "render_filed",
     "render_review",
     "review_keyboard",
