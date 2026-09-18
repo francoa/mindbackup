@@ -116,7 +116,7 @@ about — there is nobody to ask in a batch run, and it says so. `--interactive`
 is the one that asks: per atom, approve it, reject it, or give it the topics the
 model could not work out. `--dry-run` builds the same proposal and prints it
 without writing anything. The Telegram review buttons drive the same object, so
-an atom the bot holds back is never one the CLI quietly files.
+the bot and the CLI cannot disagree about what an approval files.
 
 ### Telegram commands
 
@@ -131,6 +131,27 @@ an atom the bot holds back is never one the CLI quietly files.
 `/get_topic` shows the *page* under `Topics/`, so anything you edited by hand in
 Obsidian comes back with it. A page too long for one Telegram message is split
 across several rather than truncated.
+
+### Reviewing a voice note's atoms
+
+The memo is saved before the review appears, so ignoring the review loses
+nothing but the filing. The review lists each atom with its topics. Atoms the
+model was unsure about are marked ⚠️, along with its question. Three buttons:
+
+- **✅ Approve all (N)** files every atom still pending, unclear ones included,
+  with the topics the model gave them. Decisions you made while reviewing are
+  kept.
+- **🔍 Review one by one** shows one atom at a time, with **✅ Keep**,
+  **🗑 Drop**, **🏷 Topic** and **↩️ Back** (to the overview, keeping what you
+  decided). 🏷 lists the topics already in the vault. Tap one to file the atom
+  there, or tap **✍️ New topic** and reply with topics, comma-separated
+  (`gym, health`).
+- **🗑 Discard** files nothing.
+
+Nothing is written until the end: after ✅, or once the last atom is decided.
+Leaving a review halfway files none of it. Reviews live in memory, so after a
+bot restart the buttons answer "review expired" and the memo can be re-run
+with `mindbackup extract`.
 
 New topic pages are written flat into `Topics/`, and grouping is meant to come
 from `[[wikilinks]]` rather than a directory tree. But folders are respected if
