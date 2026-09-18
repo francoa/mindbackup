@@ -376,11 +376,22 @@ def _start_review(settings, monkeypatch, memo, atoms: list[Atom] | None = None):
     return tap, query, bot_data
 
 
-def _run_review(settings, monkeypatch, memo, *buttons: str):
-    """Offer an extraction, then press its buttons in order. Returns what was said."""
-    tap, query, bot_data = _start_review(settings, monkeypatch, memo)
-    for button in buttons:
-        tap(button)
+@dataclass
+class Reply:
+    """A `_run_review` step: a text reply to the latest ✍️ prompt."""
+
+    text: str
+
+
+def _run_review(settings, monkeypatch, memo, *steps: str | Reply):
+    """Offer an extraction, then press its buttons and send its replies in order.
+    Returns what was said."""
+    tap, reply, query, bot_data = _start_conversation(settings, monkeypatch, memo)
+    for step in steps:
+        if isinstance(step, Reply):
+            reply(step.text, to=_prompt_id(query))
+        else:
+            tap(step)
     return query, bot_data
 
 
@@ -815,3 +826,30 @@ def test_a_reply_after_the_review_was_discarded(settings, monkeypatch):
 
     assert "expired" in query.sent[-1][1]
     assert list(iter_index(settings)) == []
+
+
+def test_a_review_mixing_every_kind_of_decision(settings, monkeypatch):
+    """The manual pass: drop one, pick a known topic for one, type new topics for one."""
+    _seed_topics(settings, ["gym"])
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    query, bot_data = _run_review(
+        settings,
+        monkeypatch,
+        memo,
+        CB_REVIEW,
+        f"{CB_DROP}0",
+        f"{CB_PICK}1",
+        f"{CB_PICK_TOPIC}1:gym",
+        f"{CB_PICK}2",
+        f"{CB_PICK_NEW}2",
+        Reply("coach, lower back"),
+    )
+
+    assert _this_memo(settings) == {
+        "Buy grip.": ["gym"],
+        "Talk to him.": ["coach", "lower back"],
+    }
+    assert "Filed 2" in query.texts[-1]
+    assert not bot_data["reviews"]
+    assert not bot_data["topic_prompts"]
