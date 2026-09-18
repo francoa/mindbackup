@@ -22,6 +22,9 @@ doctor:
 extract-dry-run:
 	{{ docker_compose_executable }} run --rm {{ service_name }} extract --dry-run --limit 1
 
+extract-interactive:
+	{{ docker_compose_executable }} run --rm {{ service_name }} extract 2026-09-18_3.md --interactive
+
 extract:
 	{{ docker_compose_executable }} run --rm {{ service_name }} extract
 
@@ -41,7 +44,7 @@ bash-root:
 	{{ docker_compose_executable }} {{ docker_compose_file }} exec {{ service_name }} bash
 
 test:
-	python3 -m pytest -q .
+	uv run --extra dev pytest -q .
 
 lint:
 	uv run --extra dev ruff check src tests

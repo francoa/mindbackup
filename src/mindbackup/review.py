@@ -23,9 +23,7 @@ logger = logging.getLogger(__name__)
 
 MAX_ATOMS_SHOWN = 12
 CB_APPROVE = "mb:ok"
-CB_EDIT = "mb:edit"
 CB_DISCARD = "mb:no"
-CB_RESOLVE = "mb:res"
 
 
 def _escape(text: str) -> str:
@@ -61,7 +59,7 @@ def render_review(extraction: Extraction, memo_name: str) -> str:
 
 
 def review_keyboard(extraction: Extraction):
-    """Approve / edit / discard. Imported lazily so tests need no telegram."""
+    """Approve / discard. Imported lazily so tests need no telegram."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     filed = len(extraction.atoms) - len(extraction.ambiguous)
@@ -69,7 +67,6 @@ def review_keyboard(extraction: Extraction):
         [
             [
                 InlineKeyboardButton(f"✅ File {filed}", callback_data=CB_APPROVE),
-                InlineKeyboardButton("✏️ Edit", callback_data=CB_EDIT),
                 InlineKeyboardButton("🗑 Discard", callback_data=CB_DISCARD),
             ]
         ]
@@ -91,8 +88,6 @@ def render_filed(filed: list) -> str:
 __all__ = [
     "CB_APPROVE",
     "CB_DISCARD",
-    "CB_EDIT",
-    "CB_RESOLVE",
     "render_filed",
     "render_review",
     "review_keyboard",

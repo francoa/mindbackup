@@ -22,7 +22,7 @@ What is Telegram-specific in `mindbackup/`:
 | `browse.py:99-129` | `topics_keyboard()`, `back_keyboard()` — `InlineKeyboardMarkup` |
 | `browse.py:42-52` | `topic_token()` — exists only because callback_data is capped at 64 bytes |
 | `browse.py:167-199` | `chunk_message()` — splitting for Telegram's message size |
-| `review.py:25-28` | `CB_APPROVE` / `CB_EDIT` / `CB_DISCARD` / `CB_RESOLVE` |
+| `review.py:25-26` | `CB_APPROVE` / `CB_DISCARD` |
 | `review.py:55-57` | `_escape()` — Telegram Markdown escaping |
 | `review.py:60-100` | `render_review()`, `review_keyboard()` |
 

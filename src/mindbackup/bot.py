@@ -46,10 +46,8 @@ from mindbackup.pipeline import (
     local_today,
     propose_from_transcript,
 )
-from mindbackup.proposal import Proposal
 from mindbackup.review import (
     CB_DISCARD,
-    CB_EDIT,
     render_filed,
     render_review,
     review_keyboard,
@@ -340,15 +338,6 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("🗑 Discarded. The transcript is still saved.")
         return
 
-    if query.data == CB_EDIT:
-        await query.edit_message_text(
-            f"{render_review_plain(proposal)}\n\n"
-            "✏️ Editing in Telegram isn't built yet — edit the topic pages in "
-            "Obsidian, or re-run `mindbackup extract --all`.",
-            parse_mode="Markdown",
-        )
-        return
-
     # One tap files what the model was sure of; an unclear atom stays pending
     # rather than being filed on a guess (spec C6).
     proposal.approve_confident()
@@ -360,13 +349,6 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
 
     reviews.pop(message.message_id, None)
     await query.edit_message_text(render_filed(filed), parse_mode="Markdown")
-
-
-def render_review_plain(proposal: Proposal) -> str:
-    lines = [f"🧠 From *{proposal.memo_name}*:", ""]
-    for index, atom in enumerate(proposal.atoms, start=1):
-        lines.append(f"• {index}. {atom.text}")
-    return "\n".join(lines)
 
 
 @authorizer
