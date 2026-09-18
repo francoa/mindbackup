@@ -22,9 +22,9 @@ What is Telegram-specific in `mindbackup/`:
 | `browse.py:99-129` | `topics_keyboard()`, `back_keyboard()` — `InlineKeyboardMarkup` |
 | `browse.py:42-52` | `topic_token()` — exists only because callback_data is capped at 64 bytes |
 | `browse.py:167-199` | `chunk_message()` — splitting for Telegram's message size |
-| `review.py:25-27` | `CB_APPROVE` / `CB_DISCARD` / `CB_REVIEW` |
-| `review.py:30-32` | `_escape()` — Telegram Markdown escaping |
-| `review.py:35-91` | `render_review()`, `review_keyboard()` |
+| `review.py:25-30` | `CB_APPROVE` / `CB_DISCARD` / `CB_REVIEW` / `CB_OVERVIEW` / `CB_KEEP` / `CB_DROP` |
+| `review.py:33-35` | `_escape()` — Telegram Markdown escaping |
+| `review.py:38-124` | `render_review()`, `review_keyboard()`, `render_atom_step()`, `step_keyboard()` |
 
 What is genuinely domain, in the same files:
 

@@ -46,13 +46,19 @@ from mindbackup.pipeline import (
     local_today,
     propose_from_transcript,
 )
+from mindbackup.proposal import Proposal
 from mindbackup.review import (
     CB_APPROVE,
     CB_DISCARD,
+    CB_DROP,
+    CB_KEEP,
+    CB_OVERVIEW,
     CB_REVIEW,
+    render_atom_step,
     render_filed,
     render_review,
     review_keyboard,
+    step_keyboard,
 )
 from mindbackup.topics import known_topics, topic_counts
 from mindbackup.vault import iter_memos
@@ -316,7 +322,11 @@ async def _offer_extraction(
 
 @authorizer
 async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Approve all / review / discard on a pending extraction."""
+    """Every button on a pending extraction: the overview and the one-by-one steps.
+
+    Each branch calls one `Proposal` method and redraws the message. Filing
+    happens only in `_commit_review`, once nothing is left pending.
+    """
     settings = get_settings(context)
     query = update.callback_query
     if query is None:
@@ -335,34 +345,93 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    if query.data == CB_REVIEW:
-        await query.answer("One-by-one review isn't built yet.")
-        return
+    data = query.data or ""
 
-    if query.data != CB_APPROVE and query.data != CB_DISCARD:
-        # A button from an older build, or one this handler doesn't know. Never
-        # let it fall through to filing.
-        await query.answer("That button doesn't do anything any more.")
-        return
-
-    await query.answer()
-
-    if query.data == CB_DISCARD:
+    if data == CB_DISCARD:
+        await query.answer()
         reviews.pop(message.message_id, None)
         await query.edit_message_text("🗑 Discarded. The transcript is still saved.")
         return
 
-    # "As they are": everything still pending is approved, unclear atoms with
-    # the model's topics, the same as the batch CLI. Decisions already made are
-    # kept, and nothing is left pending to be lost when the review is dropped.
-    proposal.approve_all()
+    if data == CB_APPROVE:
+        # "As they are": everything still pending is approved, unclear atoms
+        # with the model's topics, the same as the batch CLI. Decisions already
+        # made are kept, and nothing is left pending to be lost.
+        await query.answer()
+        proposal.approve_all()
+        await _commit_review(query, reviews, message.message_id, proposal, settings)
+        return
+
+    if data == CB_OVERVIEW:
+        await query.answer()
+        await query.edit_message_text(
+            render_review(proposal),
+            parse_mode="Markdown",
+            reply_markup=review_keyboard(proposal),
+        )
+        return
+
+    if data == CB_REVIEW:
+        await query.answer()
+        await _next_step(query, reviews, message.message_id, proposal, settings)
+        return
+
+    for prefix, decide in ((CB_KEEP, proposal.approve), (CB_DROP, proposal.reject)):
+        if data.startswith(prefix):
+            index = _pending_index(proposal, data[len(prefix) :])
+            if index is None:
+                # A double tap, or a button from a step already moved past.
+                await query.answer("Already decided.")
+                return
+            await query.answer()
+            decide(index)
+            await _next_step(query, reviews, message.message_id, proposal, settings)
+            return
+
+    # A button from an older build, or one this handler doesn't know. Never let
+    # it fall through to filing.
+    await query.answer("That button doesn't do anything any more.")
+
+
+def _pending_index(proposal: Proposal, raw: str) -> int | None:
+    """The atom index in callback data, if it names an atom still pending."""
+    try:
+        index = int(raw)
+    except ValueError:
+        return None
+    if not 0 <= index < len(proposal.atoms) or index in proposal.decisions:
+        return None
+    return index
+
+
+async def _next_step(query, reviews: dict, message_id: int, proposal: Proposal, settings) -> None:
+    """Show the next pending atom, or commit once none is left.
+
+    The same loop as the CLI's `_confirm_interactively`: every button changes
+    the proposal only, and `commit()` runs once, at the end.
+    """
+    pending = proposal.pending()
+    if not pending:
+        await _commit_review(query, reviews, message_id, proposal, settings)
+        return
+    index, _ = pending[0]
+    await query.edit_message_text(
+        render_atom_step(proposal, index),
+        parse_mode="Markdown",
+        reply_markup=step_keyboard(index),
+    )
+
+
+async def _commit_review(
+    query, reviews: dict, message_id: int, proposal: Proposal, settings
+) -> None:
     try:
         filed = await asyncio.to_thread(proposal.commit, settings)
     except VaultWriteError as exc:
         await query.edit_message_text(f"❌ Could not file: {exc}")
         return
 
-    reviews.pop(message.message_id, None)
+    reviews.pop(message_id, None)
     await query.edit_message_text(render_filed(filed), parse_mode="Markdown")
 
 

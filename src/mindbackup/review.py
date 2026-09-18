@@ -25,6 +25,9 @@ MAX_ATOMS_SHOWN = 12
 CB_APPROVE = "mb:ok"
 CB_DISCARD = "mb:no"
 CB_REVIEW = "mb:w"
+CB_OVERVIEW = "mb:o"
+CB_KEEP = "mb:a:"
+CB_DROP = "mb:r:"
 
 
 def _escape(text: str) -> str:
@@ -91,6 +94,36 @@ def review_keyboard(proposal: Proposal):
     )
 
 
+def render_atom_step(proposal: Proposal, index: int) -> str:
+    """One atom, reviewed on its own: text, topics, the model's question."""
+    atom = proposal.atoms[index]
+    mark = "⚠️" if atom.needs_clarification else "•"
+    lines = [
+        f"🔍 *{_escape(proposal.memo_name)}* — {index + 1} of {len(proposal.atoms)}",
+        "",
+        f"{mark} {_escape(atom.text)}",
+        f"     {_escape(_hashtags(atom.topics))}",
+    ]
+    if atom.ambiguity:
+        lines.append(f"     ❓ {_escape(atom.ambiguity)}")
+    return "\n".join(lines)
+
+
+def step_keyboard(index: int):
+    """Keep / drop this atom, or go back to the overview."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Keep", callback_data=f"{CB_KEEP}{index}"),
+                InlineKeyboardButton("🗑 Drop", callback_data=f"{CB_DROP}{index}"),
+                InlineKeyboardButton("↩️ Back", callback_data=CB_OVERVIEW),
+            ]
+        ]
+    )
+
+
 def render_filed(filed: list) -> str:
     if not filed:
         return "Nothing filed."
@@ -106,8 +139,13 @@ def render_filed(filed: list) -> str:
 __all__ = [
     "CB_APPROVE",
     "CB_DISCARD",
+    "CB_DROP",
+    "CB_KEEP",
+    "CB_OVERVIEW",
     "CB_REVIEW",
+    "render_atom_step",
     "render_filed",
     "render_review",
     "review_keyboard",
+    "step_keyboard",
 ]

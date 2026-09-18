@@ -26,10 +26,15 @@ from mindbackup.proposal import Proposal
 from mindbackup.review import (
     CB_APPROVE,
     CB_DISCARD,
+    CB_DROP,
+    CB_KEEP,
+    CB_OVERVIEW,
     CB_REVIEW,
+    MAX_ATOMS_SHOWN,
     render_filed,
     render_review,
     review_keyboard,
+    step_keyboard,
 )
 from mindbackup.topics import iter_index
 from mindbackup.vault import write_memo
@@ -222,39 +227,45 @@ def test_extraction_skipped_when_llm_unconfigured(tmp_path):
 
 @dataclass
 class FakeQuery:
-    """The half of `telegram.CallbackQuery` the review handler actually uses."""
+    """The half of `telegram.CallbackQuery` the review handler actually uses.
+
+    Reused across taps, so `texts` is everything the review message showed,
+    in order, and `markups` the keyboards that came with it.
+    """
 
     data: str
     message: FakeMessage
     texts: list = None
+    markups: list = None
     toasts: list = None
 
     def __post_init__(self):
         self.texts = []
+        self.markups = []
         self.toasts = []
 
     async def answer(self, text=None, **kwargs):
         self.toasts.append(text)
 
-    async def edit_message_text(self, text, **kwargs):
+    async def edit_message_text(self, text, reply_markup=None, **kwargs):
         self.texts.append(text)
+        self.markups.append(reply_markup)
         return self.message
 
 
-def _run_review(settings, monkeypatch, memo, button: str):
-    """Offer an extraction, then press one of its buttons. Returns what was said."""
+def _start_review(settings, monkeypatch, memo, atoms: list[Atom] | None = None):
+    """Offer an extraction. Returns a `tap(data)` that presses a button on it,
+    the query that records what was said, and `bot_data`."""
 
     def _fake_propose(text, memo_name, memo_date, settings_, *, audio=None):
         return Proposal(
             memo_name=memo_name,
             memo_date=memo_date,
-            extraction=Extraction(atoms=_atoms(), summary="s"),
+            extraction=Extraction(atoms=_atoms() if atoms is None else atoms, summary="s"),
             audio=audio,
         )
 
     monkeypatch.setattr(bot_mod, "propose_from_transcript", _fake_propose)
-    # The keyboard needs the telegram package; the message text is what we assert on.
-    monkeypatch.setattr(bot_mod, "review_keyboard", lambda proposal: None)
 
     message = FakeMessage()
     bot_data: dict = {"settings": settings}
@@ -296,14 +307,25 @@ def _run_review(settings, monkeypatch, memo, button: str):
 
     assert bot_data["reviews"][message.message_id], "the proposal must be kept to act on"
 
-    query = FakeQuery(data=button, message=message)
+    query = FakeQuery(data="", message=message)
 
     class FakeCallbackUpdate:
         effective_message = message
         effective_user = FakeUser()
         callback_query = query
 
-    asyncio.run(bot_mod.handle_review_button(FakeCallbackUpdate(), FakeContext()))
+    def tap(data: str) -> None:
+        query.data = data
+        asyncio.run(bot_mod.handle_review_button(FakeCallbackUpdate(), FakeContext()))
+
+    return tap, query, bot_data
+
+
+def _run_review(settings, monkeypatch, memo, *buttons: str):
+    """Offer an extraction, then press its buttons in order. Returns what was said."""
+    tap, query, bot_data = _start_review(settings, monkeypatch, memo)
+    for button in buttons:
+        tap(button)
     return query, bot_data
 
 
@@ -320,11 +342,11 @@ def test_approve_all_files_every_atom_unclear_ones_included(settings, monkeypatc
     assert not bot_data["reviews"], "an actioned review must not linger"
 
 
-@pytest.mark.parametrize("button", [CB_REVIEW, "mb:edit", "mb:nonsense"])
+@pytest.mark.parametrize("button", ["mb:edit", "mb:nonsense"])
 def test_a_button_that_does_not_file_writes_nothing_and_keeps_the_review(
     settings, monkeypatch, button
 ):
-    """Unbuilt or unknown callback data must never fall through to filing."""
+    """Unknown callback data must never fall through to filing."""
     memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
 
     query, bot_data = _run_review(settings, monkeypatch, memo, button)
@@ -343,3 +365,134 @@ def test_discarding_writes_nothing(settings, monkeypatch):
     assert "Discarded" in query.texts[-1]
     assert memo.path.is_file(), "the transcript survives a discarded extraction"
     assert not bot_data["reviews"]
+
+
+# --- one-by-one review -----------------------------------------------------
+
+
+def test_review_starts_at_the_first_atom(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    query, _ = _run_review(settings, monkeypatch, memo, CB_REVIEW)
+
+    assert "1 of 3" in query.texts[-1]
+    assert "Fix search." in query.texts[-1]
+    assert [b.callback_data for b in _buttons(query.markups[-1])] == [
+        f"{CB_KEEP}0",
+        f"{CB_DROP}0",
+        CB_OVERVIEW,
+    ]
+
+
+def test_review_shows_the_models_question(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    query, _ = _run_review(settings, monkeypatch, memo, CB_REVIEW, f"{CB_KEEP}0", f"{CB_KEEP}1")
+
+    assert "3 of 3" in query.texts[-1]
+    assert "Who is 'him'?" in query.texts[-1]
+
+
+def test_dropping_one_and_keeping_the_rest_files_only_the_kept(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    query, bot_data = _run_review(
+        settings, monkeypatch, memo, CB_REVIEW, f"{CB_KEEP}0", f"{CB_DROP}1", f"{CB_KEEP}2"
+    )
+
+    assert {a.text for a in iter_index(settings)} == {"Fix search.", "Talk to him."}
+    assert "Filed 2" in query.texts[-1]
+    assert not bot_data["reviews"], "a finished review must not linger"
+
+
+def test_nothing_is_written_until_the_last_decision(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    commits = []
+    real_commit = Proposal.commit
+
+    def _counting_commit(self, settings_):
+        commits.append(self.memo_name)
+        return real_commit(self, settings_)
+
+    monkeypatch.setattr(Proposal, "commit", _counting_commit)
+    tap, _, _ = _start_review(settings, monkeypatch, memo)
+
+    for data in (CB_REVIEW, f"{CB_KEEP}0", f"{CB_DROP}1"):
+        tap(data)
+        assert list(iter_index(settings)) == [], f"nothing may be filed after {data}"
+
+    tap(f"{CB_KEEP}2")
+
+    assert {a.text for a in iter_index(settings)} == {"Fix search.", "Talk to him."}
+    assert len(commits) == 1, "commit runs once, at the end"
+
+
+def test_back_then_approve_all_keeps_the_decisions_made(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    commits = []
+    real_commit = Proposal.commit
+
+    def _counting_commit(self, settings_):
+        commits.append(self.memo_name)
+        return real_commit(self, settings_)
+
+    monkeypatch.setattr(Proposal, "commit", _counting_commit)
+    tap, query, bot_data = _start_review(settings, monkeypatch, memo)
+
+    tap(CB_REVIEW)
+    tap(f"{CB_DROP}0")
+    tap(CB_OVERVIEW)
+
+    assert "🗑 1. Fix search." in query.texts[-1], "the overview shows what was decided"
+    assert _buttons(query.markups[-1])[0].text == "✅ Approve all (2)"
+    assert list(iter_index(settings)) == []
+
+    tap(CB_APPROVE)
+
+    assert {a.text for a in iter_index(settings)} == {"Buy grip.", "Talk to him."}
+    assert len(commits) == 1
+    assert not bot_data["reviews"]
+
+
+def test_review_reaches_atoms_past_the_overview_cap(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    many = [Atom(text=f"Item {i}.", topics=["t"]) for i in range(MAX_ATOMS_SHOWN + 2)]
+    tap, query, _ = _start_review(settings, monkeypatch, memo, atoms=many)
+
+    tap(CB_REVIEW)
+    for index in range(len(many) - 1):
+        tap(f"{CB_KEEP}{index}")
+
+    last = len(many) - 1
+    assert f"{last + 1} of {len(many)}" in query.texts[-1]
+    assert f"Item {last}." in query.texts[-1]
+
+    tap(f"{CB_KEEP}{last}")
+
+    assert len(list(iter_index(settings))) == len(many)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [f"{CB_KEEP}0", f"{CB_DROP}0", f"{CB_KEEP}99", f"{CB_KEEP}-1", f"{CB_DROP}x", CB_KEEP],
+)
+def test_a_double_tap_or_stale_index_is_answered_and_changes_nothing(settings, monkeypatch, data):
+    """Index 0 is already kept by the time `data` is tapped."""
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, query, bot_data = _start_review(settings, monkeypatch, memo)
+    tap(CB_REVIEW)
+    tap(f"{CB_KEEP}0")
+    shown = list(query.texts)
+
+    tap(data)
+
+    assert query.toasts[-1], "the tap must be answered with a toast"
+    assert query.texts == shown, "the message must not change"
+    proposal = bot_data["reviews"][1]
+    assert set(proposal.decisions) == {0}
+    assert list(iter_index(settings)) == []
+
+
+def test_step_keyboard_fits_telegrams_callback_limit():
+    buttons = _buttons(step_keyboard(10**6))
+    assert all(len(b.callback_data.encode()) <= 64 for b in buttons)
