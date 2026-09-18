@@ -20,6 +20,7 @@ import pytest
 
 from mindbackup import bot as bot_mod
 from mindbackup import extract as extract_mod
+from mindbackup.browse import TOPIC_TOKEN_BYTES, resolve_topic
 from mindbackup.config import Settings
 from mindbackup.extract import Atom, Extraction
 from mindbackup.proposal import Proposal
@@ -29,14 +30,19 @@ from mindbackup.review import (
     CB_DROP,
     CB_KEEP,
     CB_OVERVIEW,
+    CB_PICK,
+    CB_PICK_PAGE,
+    CB_PICK_TOPIC,
     CB_REVIEW,
     MAX_ATOMS_SHOWN,
+    picker_token_bytes,
     render_filed,
     render_review,
     review_keyboard,
     step_keyboard,
+    topic_picker_keyboard,
 )
-from mindbackup.topics import iter_index
+from mindbackup.topics import file_atoms, iter_index, topic_slug
 from mindbackup.vault import write_memo
 
 
@@ -380,6 +386,7 @@ def test_review_starts_at_the_first_atom(settings, monkeypatch):
     assert [b.callback_data for b in _buttons(query.markups[-1])] == [
         f"{CB_KEEP}0",
         f"{CB_DROP}0",
+        f"{CB_PICK}0",
         CB_OVERVIEW,
     ]
 
@@ -496,3 +503,133 @@ def test_a_double_tap_or_stale_index_is_answered_and_changes_nothing(settings, m
 def test_step_keyboard_fits_telegrams_callback_limit():
     buttons = _buttons(step_keyboard(10**6))
     assert all(len(b.callback_data.encode()) <= 64 for b in buttons)
+
+
+# --- topic picker ----------------------------------------------------------
+
+
+def _seed_topics(settings, topics: list[str]) -> None:
+    """Put topics in the vault from another memo, so the picker has something to offer."""
+    file_atoms(
+        [Atom(text=f"Seed {i}.", topics=[t]) for i, t in enumerate(topics)],
+        "2026-09-01",
+        "2026-09-01",
+        settings,
+    )
+
+
+def _this_memo(settings) -> dict[str, list[str]]:
+    return {a.text: a.topics for a in iter_index(settings) if a.memo == "2026-09-06"}
+
+
+def _button(markup, text: str):
+    return next(b for b in _buttons(markup) if b.text == text)
+
+
+def test_picking_a_known_topic_files_under_it(settings, monkeypatch):
+    _seed_topics(settings, ["gym", "padel"])
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, query, bot_data = _start_review(settings, monkeypatch, memo)
+
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+
+    assert "Pick a topic" in query.texts[-1]
+    assert "Fix search." in query.texts[-1], "the picker says which atom it is for"
+    tap(_button(query.markups[-1], "gym").callback_data)
+
+    assert "2 of 3" in query.texts[-1], "picking a topic moves on to the next atom"
+    assert _this_memo(settings) == {}, "nothing filed before the last decision"
+
+    tap(f"{CB_KEEP}1")
+    tap(f"{CB_KEEP}2")
+
+    filed = _this_memo(settings)
+    assert filed["Fix search."] == ["gym"], "filed under the chosen topic, not the model's"
+    assert filed["Buy grip."] == ["padel"]
+    assert not bot_data["reviews"]
+
+
+def test_back_from_the_picker_returns_to_the_same_atom(settings, monkeypatch):
+    _seed_topics(settings, ["gym"])
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    query, bot_data = _run_review(
+        settings, monkeypatch, memo, CB_REVIEW, f"{CB_KEEP}0", f"{CB_PICK}1", CB_REVIEW
+    )
+
+    assert "2 of 3" in query.texts[-1]
+    assert "Pick a topic" not in query.texts[-1]
+    assert set(bot_data["reviews"][1].decisions) == {0}, "backing out decides nothing"
+
+
+def test_picker_pages_through_known_topics(settings, monkeypatch):
+    _seed_topics(settings, [f"topic-{i:02d}" for i in range(20)])
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, query, _ = _start_review(settings, monkeypatch, memo)
+
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+    first = [b.text for b in _buttons(query.markups[-1])]
+    assert "page 1 of 3" in query.texts[-1]
+
+    tap(_button(query.markups[-1], "▶️").callback_data)
+
+    assert "page 2 of 3" in query.texts[-1]
+    second = [b.text for b in _buttons(query.markups[-1])]
+    assert not {t for t in first if t.startswith("topic-")} & set(second)
+    assert "◀️" in second and "▶️" in second
+
+
+def test_picker_with_no_known_topics_only_offers_back(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    query, _ = _run_review(settings, monkeypatch, memo, CB_REVIEW, f"{CB_PICK}0")
+
+    assert "No topics" in query.texts[-1]
+    assert [b.callback_data for b in _buttons(query.markups[-1])] == [CB_REVIEW]
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        f"{CB_PICK_TOPIC}1:gone-topic",
+        f"{CB_PICK_TOPIC}2:",
+        f"{CB_PICK_TOPIC}0:gym",
+        f"{CB_PICK}0",
+        f"{CB_PICK}9",
+        f"{CB_PICK_PAGE}x:1",
+    ],
+)
+def test_a_stale_picker_button_is_answered_and_changes_nothing(settings, monkeypatch, data):
+    """Index 0 is already kept; "gone-topic" is not in the vault."""
+    _seed_topics(settings, ["gym"])
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, query, bot_data = _start_review(settings, monkeypatch, memo)
+    tap(CB_REVIEW)
+    tap(f"{CB_KEEP}0")
+    shown = list(query.texts)
+
+    tap(data)
+
+    assert query.toasts[-1], "the tap must be answered with a toast"
+    assert query.texts == shown
+    assert set(bot_data["reviews"][1].decisions) == {0}
+
+
+def test_picker_callback_data_fits_telegrams_limit_on_every_page():
+    """A long slug, and one that fits /get_topic's budget but not the picker's."""
+    huge = "a very long topic name " * 10
+    borderline = "x" * TOPIC_TOKEN_BYTES
+    assert len(topic_slug(borderline).encode()) > picker_token_bytes(12)
+    topics = [huge, borderline] + [f"topic-{i:02d}" for i in range(20)]
+
+    for index in (0, 12, 10**6):
+        for page in range(3):
+            for button in _buttons(topic_picker_keyboard(index, topics, page)):
+                assert len(button.callback_data.encode()) <= 64, button.callback_data
+
+    for topic in (huge, borderline):
+        button = _button(topic_picker_keyboard(12, topics, 0), topic)
+        token = button.callback_data.split(":", 3)[3]
+        assert resolve_topic(token, topics, picker_token_bytes(12)) == topic

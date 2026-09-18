@@ -18,19 +18,19 @@ What is Telegram-specific in `mindbackup/`:
 
 | Location | Detail |
 |---|---|
-| `browse.py:26-36` | `MAX_MESSAGE_CHARS = 3500` (Telegram's 4096 limit), `MAX_TOKEN_BYTES = 58` (callback_data limit), `CB_TOPIC` / `CB_PAGE` / `CB_LIST` |
+| `browse.py:26-38` | `MAX_MESSAGE_CHARS = 3500` (Telegram's 4096 limit), `MAX_CALLBACK_BYTES = 64` / `TOPIC_TOKEN_BYTES` (callback_data limit), `CB_TOPIC` / `CB_PAGE` / `CB_LIST` |
 | `browse.py:99-129` | `topics_keyboard()`, `back_keyboard()` — `InlineKeyboardMarkup` |
-| `browse.py:42-52` | `topic_token()` — exists only because callback_data is capped at 64 bytes |
+| `browse.py:44-58` | `topic_token()` — exists only because callback_data is capped at 64 bytes |
 | `browse.py:167-199` | `chunk_message()` — splitting for Telegram's message size |
-| `review.py:25-30` | `CB_APPROVE` / `CB_DISCARD` / `CB_REVIEW` / `CB_OVERVIEW` / `CB_KEEP` / `CB_DROP` |
-| `review.py:33-35` | `_escape()` — Telegram Markdown escaping |
-| `review.py:38-124` | `render_review()`, `review_keyboard()`, `render_atom_step()`, `step_keyboard()` |
+| `review.py:26-34` | `CB_APPROVE` / `CB_DISCARD` / `CB_REVIEW` / `CB_OVERVIEW` / `CB_KEEP` / `CB_DROP` / `CB_PICK` / `CB_PICK_TOPIC` / `CB_PICK_PAGE` |
+| `review.py:37-39` | `_escape()` — Telegram Markdown escaping |
+| `review.py:42-180` | `render_review()`, `review_keyboard()`, `render_atom_step()`, `step_keyboard()`, `picker_token_bytes()`, `render_topic_picker()`, `topic_picker_keyboard()` |
 
 What is genuinely domain, in the same files:
 
 | Location | Detail |
 |---|---|
-| `browse.py:55-67` | `resolve_topic()` — name or token back to a known topic |
+| `browse.py:61-77` | `resolve_topic()` — name or token back to a known topic |
 | `browse.py:132-164` | `topic_body()`, `_from_index()`, `_strip_page_furniture()` — "everything filed under this topic, as text" |
 | `browse.py:70-81` | `page_count()`, `page_slice()` — generic pagination |
 | `review.py:103-120` | `apply_review()` — files approved atoms |

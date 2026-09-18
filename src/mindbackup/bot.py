@@ -30,6 +30,7 @@ from mindbackup.bot_module.utils import get_settings
 from mindbackup.browse import (
     CB_PAGE,
     CB_TOPIC,
+    TOPIC_TOKEN_BYTES,
     back_keyboard,
     chunk_message,
     render_topic_list,
@@ -53,12 +54,18 @@ from mindbackup.review import (
     CB_DROP,
     CB_KEEP,
     CB_OVERVIEW,
+    CB_PICK,
+    CB_PICK_PAGE,
+    CB_PICK_TOPIC,
     CB_REVIEW,
+    picker_token_bytes,
     render_atom_step,
     render_filed,
     render_review,
+    render_topic_picker,
     review_keyboard,
     step_keyboard,
+    topic_picker_keyboard,
 )
 from mindbackup.topics import known_topics, topic_counts
 from mindbackup.vault import iter_memos
@@ -123,7 +130,7 @@ async def cmd_get_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     requested = " ".join(context.args or []).strip()
     if requested:
-        match = resolve_topic(requested, topics)
+        match = resolve_topic(requested, topics, TOPIC_TOKEN_BYTES)
         if match is not None:
             await _send_topic(message, match, settings)
             return
@@ -179,7 +186,7 @@ async def handle_topic_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     topics = known_topics(settings)
 
     if data.startswith(CB_TOPIC):
-        topic = resolve_topic(data[len(CB_TOPIC) :], topics)
+        topic = resolve_topic(data[len(CB_TOPIC) :], topics, TOPIC_TOKEN_BYTES)
         if topic is None:
             # The page was renamed or deleted in Obsidian since the list was drawn.
             await query.edit_message_text(
@@ -374,6 +381,42 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
     if data == CB_REVIEW:
         await query.answer()
         await _next_step(query, reviews, message.message_id, proposal, settings)
+        return
+
+    if data.startswith(CB_PICK_TOPIC):
+        raw_index, _, token = data[len(CB_PICK_TOPIC) :].partition(":")
+        index = _pending_index(proposal, raw_index)
+        if index is None:
+            await query.answer("Already decided.")
+            return
+        topic = resolve_topic(token, known_topics(settings), picker_token_bytes(index))
+        if topic is None:
+            # Renamed or deleted in Obsidian since the picker was drawn.
+            await query.answer("That topic is gone.")
+            return
+        await query.answer()
+        proposal.reassign(index, [topic])
+        await _next_step(query, reviews, message.message_id, proposal, settings)
+        return
+
+    if data.startswith(CB_PICK_PAGE) or data.startswith(CB_PICK):
+        prefix = CB_PICK_PAGE if data.startswith(CB_PICK_PAGE) else CB_PICK
+        raw_index, _, raw_page = data[len(prefix) :].partition(":")
+        index = _pending_index(proposal, raw_index)
+        if index is None:
+            await query.answer("Already decided.")
+            return
+        try:
+            page = int(raw_page or 0)
+        except ValueError:
+            page = 0
+        await query.answer()
+        topics = known_topics(settings)
+        await query.edit_message_text(
+            render_topic_picker(proposal, index, topics, page),
+            parse_mode="Markdown",
+            reply_markup=topic_picker_keyboard(index, topics, page),
+        )
         return
 
     for prefix, decide in ((CB_KEEP, proposal.approve), (CB_DROP, proposal.reject)):

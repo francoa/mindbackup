@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 
+from .browse import MAX_CALLBACK_BYTES, page_count, page_slice, topic_token
 from .proposal import Proposal, Verdict
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,9 @@ CB_REVIEW = "mb:w"
 CB_OVERVIEW = "mb:o"
 CB_KEEP = "mb:a:"
 CB_DROP = "mb:r:"
+CB_PICK = "mb:t:"
+CB_PICK_TOPIC = "mb:ts:"
+CB_PICK_PAGE = "mb:tp:"
 
 
 def _escape(text: str) -> str:
@@ -110,7 +114,7 @@ def render_atom_step(proposal: Proposal, index: int) -> str:
 
 
 def step_keyboard(index: int):
-    """Keep / drop this atom, or go back to the overview."""
+    """Keep / drop / re-topic this atom, or go back to the overview."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     return InlineKeyboardMarkup(
@@ -118,10 +122,62 @@ def step_keyboard(index: int):
             [
                 InlineKeyboardButton("✅ Keep", callback_data=f"{CB_KEEP}{index}"),
                 InlineKeyboardButton("🗑 Drop", callback_data=f"{CB_DROP}{index}"),
+                InlineKeyboardButton("🏷 Topic", callback_data=f"{CB_PICK}{index}"),
                 InlineKeyboardButton("↩️ Back", callback_data=CB_OVERVIEW),
             ]
         ]
     )
+
+
+def picker_token_bytes(index: int) -> int:
+    """What Telegram's callback limit leaves for a topic token after "mb:ts:<i>:"."""
+    return MAX_CALLBACK_BYTES - len(f"{CB_PICK_TOPIC}{index}:".encode())
+
+
+def _clamp(topics: list[str], page: int) -> int:
+    return max(0, min(page, page_count(topics) - 1))
+
+
+def render_topic_picker(proposal: Proposal, index: int, topics: list[str], page: int = 0) -> str:
+    """The atom being re-topiced, with a line asking for its topic."""
+    lines = [render_atom_step(proposal, index), ""]
+    if not topics:
+        lines.append("🏷 No topics in the vault yet.")
+        return "\n".join(lines)
+    line = "🏷 Pick a topic:"
+    if page_count(topics) > 1:
+        line += f" (page {_clamp(topics, page) + 1} of {page_count(topics)})"
+    lines.append(line)
+    return "\n".join(lines)
+
+
+def topic_picker_keyboard(index: int, topics: list[str], page: int = 0):
+    """One button per known topic on this page, prev/next, and back to the atom."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    page = _clamp(topics, page)
+    budget = picker_token_bytes(index)
+    rows = [
+        [
+            InlineKeyboardButton(
+                topic, callback_data=f"{CB_PICK_TOPIC}{index}:{topic_token(topic, budget)}"
+            )
+        ]
+        for topic in page_slice(topics, page)
+    ]
+
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"{CB_PICK_PAGE}{index}:{page - 1}"))
+    if page < page_count(topics) - 1:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"{CB_PICK_PAGE}{index}:{page + 1}"))
+    if nav:
+        rows.append(nav)
+
+    # The atom being picked for is always the first pending one, which is what
+    # starting the review shows.
+    rows.append([InlineKeyboardButton("↩️ Back", callback_data=CB_REVIEW)])
+    return InlineKeyboardMarkup(rows)
 
 
 def render_filed(filed: list) -> str:
@@ -142,10 +198,16 @@ __all__ = [
     "CB_DROP",
     "CB_KEEP",
     "CB_OVERVIEW",
+    "CB_PICK",
+    "CB_PICK_PAGE",
+    "CB_PICK_TOPIC",
     "CB_REVIEW",
+    "picker_token_bytes",
     "render_atom_step",
     "render_filed",
     "render_review",
+    "render_topic_picker",
     "review_keyboard",
     "step_keyboard",
+    "topic_picker_keyboard",
 ]

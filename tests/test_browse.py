@@ -18,6 +18,7 @@ from mindbackup.browse import (
     CB_PAGE,
     CB_TOPIC,
     MAX_MESSAGE_CHARS,
+    TOPIC_TOKEN_BYTES,
     TOPICS_PER_PAGE,
     chunk_message,
     page_count,
@@ -58,27 +59,38 @@ def filled(settings: Settings) -> Settings:
 def test_token_round_trips_through_the_topic_list():
     topics = ["voice mind backup", "padel"]
     for topic in topics:
-        assert resolve_topic(topic_token(topic), topics) == topic
+        assert (
+            resolve_topic(topic_token(topic, TOPIC_TOKEN_BYTES), topics, TOPIC_TOKEN_BYTES) == topic
+        )
 
 
 def test_token_stays_inside_telegram_callback_limit():
     huge = "a very long topic name " * 10
-    token = topic_token(huge)
+    token = topic_token(huge, TOPIC_TOKEN_BYTES)
     assert len(f"{CB_TOPIC}{token}".encode()) <= 64
+
+
+def test_token_respects_the_budget_it_is_given():
+    """Each keyboard's prefix is a different length, so the budget is the caller's."""
+    topic = "x" * 20
+    assert topic_token(topic, 20) == topic
+    short = topic_token(topic, 19)
+    assert short.startswith("#") and len(short.encode()) <= 19
+    assert resolve_topic(short, [topic], 19) == topic
 
 
 def test_long_topic_token_is_deterministic():
     """A restart must not orphan the buttons already on screen."""
     huge = "a very long topic name " * 10
-    assert topic_token(huge) == topic_token(huge)
-    assert resolve_topic(topic_token(huge), [huge]) == huge
+    assert topic_token(huge, TOPIC_TOKEN_BYTES) == topic_token(huge, TOPIC_TOKEN_BYTES)
+    assert resolve_topic(topic_token(huge, TOPIC_TOKEN_BYTES), [huge], TOPIC_TOKEN_BYTES) == huge
 
 
 def test_resolve_accepts_a_name_the_user_typed():
     topics = ["voice mind backup"]
-    assert resolve_topic("Voice Mind Backup", topics) == "voice mind backup"
-    assert resolve_topic("voice-mind-backup", topics) == "voice mind backup"
-    assert resolve_topic("padel", topics) is None
+    assert resolve_topic("Voice Mind Backup", topics, TOPIC_TOKEN_BYTES) == "voice mind backup"
+    assert resolve_topic("voice-mind-backup", topics, TOPIC_TOKEN_BYTES) == "voice mind backup"
+    assert resolve_topic("padel", topics, TOPIC_TOKEN_BYTES) is None
 
 
 # --- listing ---------------------------------------------------------------
@@ -248,7 +260,7 @@ class FakeQuery:
 def test_pressing_a_topic_button_shows_its_content(filled):
     message = FakeMessage()
     topic = "voice-mind-backup"
-    query = FakeQuery(data=f"{CB_TOPIC}{topic_token(topic)}", message=message)
+    query = FakeQuery(data=f"{CB_TOPIC}{topic_token(topic, TOPIC_TOKEN_BYTES)}", message=message)
 
     asyncio.run(bot_mod.handle_topic_button(_update(message, query=query), _context(filled)))
 

@@ -26,39 +26,48 @@ logger = logging.getLogger(__name__)
 TOPICS_PER_PAGE = 8
 #: Telegram rejects a message over 4096 characters; leave room for the header.
 MAX_MESSAGE_CHARS = 3500
-#: Telegram rejects callback_data over 64 bytes; "mbt:t:" eats six of them.
-MAX_TOKEN_BYTES = 58
+#: Telegram rejects callback_data over 64 bytes.
+MAX_CALLBACK_BYTES = 64
 #: Cap on the fallback index render, so a huge topic cannot spam the chat.
 MAX_FALLBACK_ATOMS = 200
 
 CB_TOPIC = "mbt:t:"
 CB_PAGE = "mbt:p:"
 CB_LIST = "mbt:list"
+#: What is left of the callback limit for a token after "mbt:t:".
+TOPIC_TOKEN_BYTES = MAX_CALLBACK_BYTES - len(CB_TOPIC)
 
 _FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
 _BLOCK_REF_RE = re.compile(r"[ \t]*\^mb-[0-9a-f]{10}[ \t]*$", re.MULTILINE)
 
 
-def topic_token(topic: str) -> str:
-    """Callback token for a topic: its slug, or a hash when the slug is too long.
+def topic_token(topic: str, max_bytes: int) -> str:
+    """Callback token for a topic: its slug, or a hash when the slug is over `max_bytes`.
+
+    `max_bytes` is what the caller's prefix leaves of Telegram's 64-byte
+    limit, so each keyboard passes its own. The hash is 11 bytes, so the
+    budget must be at least that.
 
     The hash is derived from the slug rather than handed out from a table in
     process memory, so a button still works after the bot restarts — the same
     trade the block references make on the page itself.
     """
     slug = topic_slug(topic)
-    if len(slug.encode("utf-8")) <= MAX_TOKEN_BYTES:
+    if len(slug.encode("utf-8")) <= max_bytes:
         return slug
     return "#" + hashlib.sha256(slug.encode("utf-8")).hexdigest()[:10]
 
 
-def resolve_topic(token: str, topics: list[str]) -> str | None:
-    """Token (or a name the user typed) back to one of the known topics."""
+def resolve_topic(token: str, topics: list[str], max_bytes: int) -> str | None:
+    """Token (or a name the user typed) back to one of the known topics.
+
+    `max_bytes` must be the budget the token was made with.
+    """
     token = (token or "").strip()
     if not token:
         return None
     for topic in topics:
-        if topic_token(topic) == token:
+        if topic_token(topic, max_bytes) == token:
             return topic
     wanted = normalise_topic(token)
     for topic in topics:
@@ -108,7 +117,13 @@ def topics_keyboard(topics: list[str], page: int = 0, counts: dict | None = None
     for topic in page_slice(topics, page):
         count = (counts or {}).get(topic)
         label = topic if count is None else f"{topic} ({count})"
-        rows.append([InlineKeyboardButton(label, callback_data=f"{CB_TOPIC}{topic_token(topic)}")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    label, callback_data=f"{CB_TOPIC}{topic_token(topic, TOPIC_TOKEN_BYTES)}"
+                )
+            ]
+        )
 
     total_pages = page_count(topics)
     if total_pages > 1:
@@ -203,7 +218,9 @@ __all__ = [
     "CB_LIST",
     "CB_PAGE",
     "CB_TOPIC",
+    "MAX_CALLBACK_BYTES",
     "TOPICS_PER_PAGE",
+    "TOPIC_TOKEN_BYTES",
     "back_keyboard",
     "chunk_message",
     "page_count",
