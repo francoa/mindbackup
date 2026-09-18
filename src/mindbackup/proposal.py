@@ -49,6 +49,16 @@ class Decision:
     topics: tuple[str, ...] = ()
 
 
+def parse_topics(raw: str) -> list[str]:
+    """Topics a person typed, comma-separated, as `Proposal.reassign` takes them.
+
+    Shared by every frontend that asks for topics as text. Parts that would
+    normalise to nothing ("#", " , ") are dropped here, so an empty result
+    reliably means "no topics given" and the frontend can ask again.
+    """
+    return [part.strip() for part in (raw or "").split(",") if normalise_topic(part)]
+
+
 @dataclass
 class Proposal:
     """Extraction output awaiting a human decision.
@@ -154,4 +164,4 @@ class Proposal:
         )
 
 
-__all__ = ["Decision", "Proposal", "Verdict"]
+__all__ = ["Decision", "Proposal", "Verdict", "parse_topics"]

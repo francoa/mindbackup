@@ -22,9 +22,9 @@ What is Telegram-specific in `mindbackup/`:
 | `browse.py:99-129` | `topics_keyboard()`, `back_keyboard()` — `InlineKeyboardMarkup` |
 | `browse.py:44-58` | `topic_token()` — exists only because callback_data is capped at 64 bytes |
 | `browse.py:167-199` | `chunk_message()` — splitting for Telegram's message size |
-| `review.py:26-34` | `CB_APPROVE` / `CB_DISCARD` / `CB_REVIEW` / `CB_OVERVIEW` / `CB_KEEP` / `CB_DROP` / `CB_PICK` / `CB_PICK_TOPIC` / `CB_PICK_PAGE` |
-| `review.py:37-39` | `_escape()` — Telegram Markdown escaping |
-| `review.py:42-180` | `render_review()`, `review_keyboard()`, `render_atom_step()`, `step_keyboard()`, `picker_token_bytes()`, `render_topic_picker()`, `topic_picker_keyboard()` |
+| `review.py:26-35` | `CB_APPROVE` / `CB_DISCARD` / `CB_REVIEW` / `CB_OVERVIEW` / `CB_KEEP` / `CB_DROP` / `CB_PICK` / `CB_PICK_TOPIC` / `CB_PICK_PAGE` / `CB_PICK_NEW` |
+| `review.py:38-40` | `_escape()` — Telegram Markdown escaping |
+| `review.py:43-197` | `render_review()`, `review_keyboard()`, `render_atom_step()`, `step_keyboard()`, `picker_token_bytes()`, `render_topic_picker()`, `topic_picker_keyboard()`, `render_topic_prompt()`, `render_reassigned()` |
 
 What is genuinely domain, in the same files:
 

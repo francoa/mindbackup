@@ -20,6 +20,7 @@ from pathlib import Path
 from mindbackup.config import ConfigError, Settings, load_settings
 from mindbackup.extract import KINDS
 from mindbackup.pipeline import TranscriptionError, VaultWriteError, ingest_audio
+from mindbackup.proposal import parse_topics
 from mindbackup.topics import known_topics
 
 logger = logging.getLogger(__name__)
@@ -236,8 +237,7 @@ def _ask_topics(known: list[str]) -> list[str]:
     if known:
         shown = ", ".join(known[:20]) + ("…" if len(known) > 20 else "")
         out(f"            known: {shown}")
-    raw = _ask("            topics (comma-separated): ")
-    return [part.strip() for part in raw.split(",") if part.strip()]
+    return parse_topics(_ask("            topics (comma-separated): "))
 
 
 def _confirm_interactively(proposal, settings: Settings) -> bool:

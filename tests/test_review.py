@@ -12,11 +12,14 @@ intelligence layer is allowed to fail; it is not allowed to break that.
 from __future__ import annotations
 
 import asyncio
+import itertools
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from telegram import ForceReply
 
 from mindbackup import bot as bot_mod
 from mindbackup import extract as extract_mod
@@ -31,6 +34,7 @@ from mindbackup.review import (
     CB_KEEP,
     CB_OVERVIEW,
     CB_PICK,
+    CB_PICK_NEW,
     CB_PICK_PAGE,
     CB_PICK_TOPIC,
     CB_REVIEW,
@@ -259,9 +263,12 @@ class FakeQuery:
         return self.message
 
 
-def _start_review(settings, monkeypatch, memo, atoms: list[Atom] | None = None):
-    """Offer an extraction. Returns a `tap(data)` that presses a button on it,
-    the query that records what was said, and `bot_data`."""
+def _start_conversation(settings, monkeypatch, memo, atoms: list[Atom] | None = None):
+    """Offer an extraction. Returns `tap(data)`, which presses a button on it;
+    `reply(text, to)`, which sends a text reply to message id `to`; the query,
+    whose `texts`/`markups` are what the review message showed and whose
+    `sent` is every new message the bot sent after the offer; and `bot_data`.
+    """
 
     def _fake_propose(text, memo_name, memo_date, settings_, *, audio=None):
         return Proposal(
@@ -324,6 +331,48 @@ def _start_review(settings, monkeypatch, memo, atoms: list[Atom] | None = None):
         query.data = data
         asyncio.run(bot_mod.handle_review_button(FakeCallbackUpdate(), FakeContext()))
 
+    # From here on, a reply is a new message with its own id, like Telegram's.
+    query.sent = []
+    ids = itertools.count(message.message_id + 1)
+
+    async def _send(text, reply_markup=None, **kwargs):
+        sent = FakeMessage(message_id=next(ids))
+        query.sent.append((sent.message_id, text, reply_markup))
+        return sent
+
+    message.reply_text = _send
+
+    class FakeBot:
+        async def edit_message_text(
+            self, text, chat_id=None, message_id=None, reply_markup=None, **kwargs
+        ):
+            assert message_id == message.message_id, "only the review message is edited"
+            query.texts.append(text)
+            query.markups.append(reply_markup)
+
+    FakeContext.bot = FakeBot()
+
+    def reply(text: str, to: int | None) -> None:
+        incoming = SimpleNamespace(
+            text=text,
+            chat_id=7,
+            reply_to_message=SimpleNamespace(message_id=to) if to is not None else None,
+            reply_text=_send,
+        )
+
+        class FakeReplyUpdate:
+            effective_message = incoming
+            effective_user = FakeUser()
+            callback_query = None
+
+        asyncio.run(bot_mod.handle_topic_reply(FakeReplyUpdate(), FakeContext()))
+
+    return tap, reply, query, bot_data
+
+
+def _start_review(settings, monkeypatch, memo, atoms: list[Atom] | None = None):
+    """`_start_conversation` for tests that only press buttons."""
+    tap, _, query, bot_data = _start_conversation(settings, monkeypatch, memo, atoms)
     return tap, query, bot_data
 
 
@@ -581,13 +630,13 @@ def test_picker_pages_through_known_topics(settings, monkeypatch):
     assert "◀️" in second and "▶️" in second
 
 
-def test_picker_with_no_known_topics_only_offers_back(settings, monkeypatch):
+def test_picker_with_no_known_topics_offers_a_new_one_and_back(settings, monkeypatch):
     memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
 
     query, _ = _run_review(settings, monkeypatch, memo, CB_REVIEW, f"{CB_PICK}0")
 
     assert "No topics" in query.texts[-1]
-    assert [b.callback_data for b in _buttons(query.markups[-1])] == [CB_REVIEW]
+    assert [b.callback_data for b in _buttons(query.markups[-1])] == [f"{CB_PICK_NEW}0", CB_REVIEW]
 
 
 @pytest.mark.parametrize(
@@ -633,3 +682,136 @@ def test_picker_callback_data_fits_telegrams_limit_on_every_page():
         button = _button(topic_picker_keyboard(12, topics, 0), topic)
         token = button.callback_data.split(":", 3)[3]
         assert resolve_topic(token, topics, picker_token_bytes(12)) == topic
+
+
+# --- new topics by text reply ----------------------------------------------
+
+
+def _prompt_id(query) -> int:
+    """The id of the latest ✍️ prompt the bot sent."""
+    return next(mid for mid, text, _ in reversed(query.sent) if "comma-separated" in text)
+
+
+def test_new_topic_button_asks_with_a_force_reply(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, _, query, bot_data = _start_conversation(settings, monkeypatch, memo)
+
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+    tap(f"{CB_PICK_NEW}0")
+
+    _, text, markup = query.sent[-1]
+    assert text == "✍️ Topics for #1, comma-separated:"
+    assert isinstance(markup, ForceReply)
+    assert bot_data["topic_prompts"] == {_prompt_id(query): (1, 0)}
+
+
+def test_replying_with_new_topics_files_under_all_of_them(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, reply, query, bot_data = _start_conversation(settings, monkeypatch, memo)
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+    tap(f"{CB_PICK_NEW}0")
+
+    reply("gym, Health", to=_prompt_id(query))
+
+    assert "2 of 3" in query.texts[-1], "the review message moves on to the next atom"
+    assert query.sent[-1][1] == "🏷 #1 → #gym #health"
+    assert bot_data["topic_prompts"] == {}, "an answered prompt is forgotten"
+    assert list(iter_index(settings)) == [], "nothing filed before the last decision"
+
+    tap(f"{CB_KEEP}1")
+    tap(f"{CB_KEEP}2")
+
+    filed = {a.text: a.topics for a in iter_index(settings)}
+    assert filed["Fix search."] == ["gym", "health"]
+
+
+def test_a_reply_on_the_last_atom_commits(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, reply, query, bot_data = _start_conversation(settings, monkeypatch, memo)
+    for data in (CB_REVIEW, f"{CB_KEEP}0", f"{CB_KEEP}1", f"{CB_PICK}2", f"{CB_PICK_NEW}2"):
+        tap(data)
+
+    reply("coach", to=_prompt_id(query))
+
+    assert "Filed 3" in query.texts[-1]
+    assert {a.text: a.topics for a in iter_index(settings)}["Talk to him."] == ["coach"]
+    assert not bot_data["reviews"]
+
+
+@pytest.mark.parametrize("text", ["", "  ", " , #, "])
+def test_an_empty_reply_asks_again(settings, monkeypatch, text):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, reply, query, bot_data = _start_conversation(settings, monkeypatch, memo)
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+    tap(f"{CB_PICK_NEW}0")
+    first = _prompt_id(query)
+
+    reply(text, to=first)
+
+    second = _prompt_id(query)
+    assert second != first
+    assert "no topics" in query.sent[-1][1]
+    assert isinstance(query.sent[-1][2], ForceReply)
+    assert bot_data["topic_prompts"] == {second: (1, 0)}
+    assert bot_data["reviews"][1].decisions == {}, "no reassigning to nothing"
+
+
+def test_typed_topics_are_escaped_for_markdown(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, reply, query, _ = _start_conversation(settings, monkeypatch, memo)
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+    tap(f"{CB_PICK_NEW}0")
+
+    reply("my_topic*", to=_prompt_id(query))
+    tap(CB_OVERVIEW)
+
+    assert query.sent[-1][1] == "🏷 #1 → #my\\_topic\\*"
+    assert "#my\\_topic\\*" in query.texts[-1], "the overview shows them escaped too"
+
+
+@pytest.mark.parametrize("to", [999, None])
+def test_a_reply_to_an_unknown_prompt_gets_the_usual_answer(settings, monkeypatch, to):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    _, reply, query, bot_data = _start_conversation(settings, monkeypatch, memo)
+
+    reply("gym", to=to)
+
+    assert query.sent[-1][1] == bot_mod.NOT_A_VOICE_NOTE
+    assert bot_data["reviews"][1].decisions == {}
+
+
+def test_a_reply_after_the_atom_was_decided_by_button(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, reply, query, bot_data = _start_conversation(settings, monkeypatch, memo)
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+    tap(f"{CB_PICK_NEW}0")
+    prompt = _prompt_id(query)
+    tap(CB_REVIEW)
+    tap(f"{CB_DROP}0")
+    shown = list(query.texts)
+
+    reply("gym", to=prompt)
+
+    assert "already decided" in query.sent[-1][1]
+    assert query.texts == shown
+    assert bot_data["reviews"][1].decisions[0].verdict.value == "reject"
+
+
+def test_a_reply_after_the_review_was_discarded(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+    tap, reply, query, _ = _start_conversation(settings, monkeypatch, memo)
+    tap(CB_REVIEW)
+    tap(f"{CB_PICK}0")
+    tap(f"{CB_PICK_NEW}0")
+    prompt = _prompt_id(query)
+    tap(CB_DISCARD)
+
+    reply("gym", to=prompt)
+
+    assert "expired" in query.sent[-1][1]
+    assert list(iter_index(settings)) == []

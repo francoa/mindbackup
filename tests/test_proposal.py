@@ -19,7 +19,7 @@ import pytest
 
 from mindbackup.config import Settings
 from mindbackup.extract import Atom, Extraction
-from mindbackup.proposal import Proposal, Verdict
+from mindbackup.proposal import Proposal, Verdict, parse_topics
 from mindbackup.topics import iter_index, search
 
 
@@ -127,6 +127,13 @@ def test_reassign_normalises_and_dedupes_what_the_user_typed(settings):
 
     assert proposal.decisions[2].topics == ("coach", "lower back")
     assert proposal.decisions[2].verdict is Verdict.REASSIGN
+
+
+def test_parse_topics_splits_on_commas_and_drops_empty_parts():
+    """Shared by the CLI's `t` prompt and the bot's ✍️ reply."""
+    assert parse_topics("gym, Health ,, #, lower back") == ["gym", "Health", "lower back"]
+    assert parse_topics(" , # ") == []
+    assert parse_topics("") == []
 
 
 def test_queries_do_not_mutate_the_extraction(settings):

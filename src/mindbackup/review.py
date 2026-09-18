@@ -32,6 +32,7 @@ CB_DROP = "mb:r:"
 CB_PICK = "mb:t:"
 CB_PICK_TOPIC = "mb:ts:"
 CB_PICK_PAGE = "mb:tp:"
+CB_PICK_NEW = "mb:tn:"
 
 
 def _escape(text: str) -> str:
@@ -142,7 +143,7 @@ def render_topic_picker(proposal: Proposal, index: int, topics: list[str], page:
     """The atom being re-topiced, with a line asking for its topic."""
     lines = [render_atom_step(proposal, index), ""]
     if not topics:
-        lines.append("🏷 No topics in the vault yet.")
+        lines.append("🏷 No topics in the vault yet. Tap ✍️ to add one.")
         return "\n".join(lines)
     line = "🏷 Pick a topic:"
     if page_count(topics) > 1:
@@ -152,7 +153,7 @@ def render_topic_picker(proposal: Proposal, index: int, topics: list[str], page:
 
 
 def topic_picker_keyboard(index: int, topics: list[str], page: int = 0):
-    """One button per known topic on this page, prev/next, and back to the atom."""
+    """One button per known topic on this page, prev/next, a new topic, and back."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     page = _clamp(topics, page)
@@ -176,8 +177,24 @@ def topic_picker_keyboard(index: int, topics: list[str], page: int = 0):
 
     # The atom being picked for is always the first pending one, which is what
     # starting the review shows.
-    rows.append([InlineKeyboardButton("↩️ Back", callback_data=CB_REVIEW)])
+    rows.append(
+        [
+            InlineKeyboardButton("✍️ New topic", callback_data=f"{CB_PICK_NEW}{index}"),
+            InlineKeyboardButton("↩️ Back", callback_data=CB_REVIEW),
+        ]
+    )
     return InlineKeyboardMarkup(rows)
+
+
+def render_topic_prompt(index: int, retry: bool = False) -> str:
+    """The question a ✍️ tap sends; the reply is what `handle_topic_reply` reads."""
+    ask = f"✍️ Topics for #{index + 1}, comma-separated:"
+    return f"That had no topics in it. {ask}" if retry else ask
+
+
+def render_reassigned(index: int, topics) -> str:
+    """Confirms a typed reply, since the review message it changed may be off screen."""
+    return f"🏷 #{index + 1} → {_escape(_hashtags(topics))}"
 
 
 def render_filed(filed: list) -> str:
@@ -199,14 +216,17 @@ __all__ = [
     "CB_KEEP",
     "CB_OVERVIEW",
     "CB_PICK",
+    "CB_PICK_NEW",
     "CB_PICK_PAGE",
     "CB_PICK_TOPIC",
     "CB_REVIEW",
     "picker_token_bytes",
     "render_atom_step",
     "render_filed",
+    "render_reassigned",
     "render_review",
     "render_topic_picker",
+    "render_topic_prompt",
     "review_keyboard",
     "step_keyboard",
     "topic_picker_keyboard",

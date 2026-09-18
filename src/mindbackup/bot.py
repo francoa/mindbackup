@@ -11,11 +11,12 @@ Every path through `handle_voice` ends in a Telegram reply.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import tempfile
 from pathlib import Path
 
-from telegram import Update
+from telegram import ForceReply, Update
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -47,7 +48,7 @@ from mindbackup.pipeline import (
     local_today,
     propose_from_transcript,
 )
-from mindbackup.proposal import Proposal
+from mindbackup.proposal import Proposal, parse_topics
 from mindbackup.review import (
     CB_APPROVE,
     CB_DISCARD,
@@ -55,14 +56,17 @@ from mindbackup.review import (
     CB_KEEP,
     CB_OVERVIEW,
     CB_PICK,
+    CB_PICK_NEW,
     CB_PICK_PAGE,
     CB_PICK_TOPIC,
     CB_REVIEW,
     picker_token_bytes,
     render_atom_step,
     render_filed,
+    render_reassigned,
     render_review,
     render_topic_picker,
+    render_topic_prompt,
     review_keyboard,
     step_keyboard,
     topic_picker_keyboard,
@@ -366,7 +370,9 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
         # made are kept, and nothing is left pending to be lost.
         await query.answer()
         proposal.approve_all()
-        await _commit_review(query, reviews, message.message_id, proposal, settings)
+        await _commit_review(
+            query.edit_message_text, reviews, message.message_id, proposal, settings
+        )
         return
 
     if data == CB_OVERVIEW:
@@ -380,7 +386,7 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if data == CB_REVIEW:
         await query.answer()
-        await _next_step(query, reviews, message.message_id, proposal, settings)
+        await _next_step(query.edit_message_text, reviews, message.message_id, proposal, settings)
         return
 
     if data.startswith(CB_PICK_TOPIC):
@@ -396,7 +402,16 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
             return
         await query.answer()
         proposal.reassign(index, [topic])
-        await _next_step(query, reviews, message.message_id, proposal, settings)
+        await _next_step(query.edit_message_text, reviews, message.message_id, proposal, settings)
+        return
+
+    if data.startswith(CB_PICK_NEW):
+        index = _pending_index(proposal, data[len(CB_PICK_NEW) :])
+        if index is None:
+            await query.answer("Already decided.")
+            return
+        await query.answer()
+        await _ask_for_topics(message, context, message.message_id, index)
         return
 
     if data.startswith(CB_PICK_PAGE) or data.startswith(CB_PICK):
@@ -428,7 +443,9 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
                 return
             await query.answer()
             decide(index)
-            await _next_step(query, reviews, message.message_id, proposal, settings)
+            await _next_step(
+                query.edit_message_text, reviews, message.message_id, proposal, settings
+            )
             return
 
     # A button from an older build, or one this handler doesn't know. Never let
@@ -447,18 +464,20 @@ def _pending_index(proposal: Proposal, raw: str) -> int | None:
     return index
 
 
-async def _next_step(query, reviews: dict, message_id: int, proposal: Proposal, settings) -> None:
+async def _next_step(edit, reviews: dict, message_id: int, proposal: Proposal, settings) -> None:
     """Show the next pending atom, or commit once none is left.
 
     The same loop as the CLI's `_confirm_interactively`: every button changes
-    the proposal only, and `commit()` runs once, at the end.
+    the proposal only, and `commit()` runs once, at the end. `edit` redraws
+    the review message: a button's `query.edit_message_text`, or a bot edit
+    by message id when the change came from a text reply.
     """
     pending = proposal.pending()
     if not pending:
-        await _commit_review(query, reviews, message_id, proposal, settings)
+        await _commit_review(edit, reviews, message_id, proposal, settings)
         return
     index, _ = pending[0]
-    await query.edit_message_text(
+    await edit(
         render_atom_step(proposal, index),
         parse_mode="Markdown",
         reply_markup=step_keyboard(index),
@@ -466,16 +485,76 @@ async def _next_step(query, reviews: dict, message_id: int, proposal: Proposal, 
 
 
 async def _commit_review(
-    query, reviews: dict, message_id: int, proposal: Proposal, settings
+    edit, reviews: dict, message_id: int, proposal: Proposal, settings
 ) -> None:
     try:
         filed = await asyncio.to_thread(proposal.commit, settings)
     except VaultWriteError as exc:
-        await query.edit_message_text(f"❌ Could not file: {exc}")
+        await edit(f"❌ Could not file: {exc}")
         return
 
     reviews.pop(message_id, None)
-    await query.edit_message_text(render_filed(filed), parse_mode="Markdown")
+    await edit(render_filed(filed), parse_mode="Markdown")
+
+
+NOT_A_VOICE_NOTE = "Send me a voice note. Text messages aren't saved in Milestone 1."
+
+
+async def _ask_for_topics(
+    message, context: ContextTypes.DEFAULT_TYPE, review_id: int, index: int, retry: bool = False
+) -> None:
+    """Send a ForceReply asking for topics, and remember which atom it is for."""
+    prompt = await message.reply_text(
+        render_topic_prompt(index, retry=retry),
+        reply_markup=ForceReply(selective=True, input_field_placeholder="gym, health"),
+    )
+    prompts: dict = context.application.bot_data.setdefault("topic_prompts", {})
+    prompts[prompt.message_id] = (review_id, index)
+
+
+@authorizer
+async def handle_topic_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """A text reply to a ✍️ prompt: reassign that atom, then move the review on."""
+    settings = get_settings(context)
+    message = update.effective_message
+    if message is None:
+        return
+
+    bot_data = context.application.bot_data
+    prompts: dict = bot_data.setdefault("topic_prompts", {})
+    replied = message.reply_to_message
+    entry = prompts.pop(replied.message_id, None) if replied else None
+    if entry is None:
+        await message.reply_text(NOT_A_VOICE_NOTE)
+        return
+
+    review_id, index = entry
+    reviews: dict = bot_data.setdefault("reviews", {})
+    proposal = reviews.get(review_id)
+    if proposal is None:
+        await message.reply_text(
+            "⌛ That review expired. Run `mindbackup extract` to redo it.",
+            parse_mode="Markdown",
+        )
+        return
+    if _pending_index(proposal, str(index)) is None:
+        # Decided from the buttons while the prompt was open.
+        await message.reply_text(f"#{index + 1} is already decided.")
+        return
+
+    topics = parse_topics(message.text or "")
+    if not topics:
+        await _ask_for_topics(message, context, review_id, index, retry=True)
+        return
+
+    proposal.reassign(index, topics)
+    edit = functools.partial(
+        context.bot.edit_message_text, chat_id=message.chat_id, message_id=review_id
+    )
+    await _next_step(edit, reviews, review_id, proposal, settings)
+    await message.reply_text(
+        render_reassigned(index, proposal.decisions[index].topics), parse_mode="Markdown"
+    )
 
 
 @authorizer
@@ -483,7 +562,7 @@ async def handle_other(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = update.effective_message
     if message is None:
         return
-    await message.reply_text("Send me a voice note. Text messages aren't saved in Milestone 1.")
+    await message.reply_text(NOT_A_VOICE_NOTE)
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -508,6 +587,10 @@ def build_application(settings: Settings):
     app.add_handler(CommandHandler("get_topic", cmd_get_topic))
     app.add_handler(
         MessageHandler(filters.VOICE | filters.AUDIO | filters.Document.AUDIO, handle_voice)
+    )
+    # Before handle_other: the first matching handler wins.
+    app.add_handler(
+        MessageHandler(filters.TEXT & filters.REPLY & ~filters.COMMAND, handle_topic_reply)
     )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_other))
     app.add_handler(CallbackQueryHandler(handle_review_button, pattern=r"^mb:"))
