@@ -328,6 +328,89 @@ def file_atoms(
     return filed
 
 
+@dataclass(frozen=True)
+class MemoRemoval:
+    """What `remove_memo` took out (or would take out, in a dry run)."""
+
+    atoms: list[StoredAtom]
+    bullets: dict[Path, int]
+
+
+def _is_memo_bullet(line: str, memo_name: str, ids: set[str]) -> bool:
+    """A bullet we filed for this memo: by block id, or by its memo link.
+
+    The link fallback catches bullets whose index line is already gone (a
+    hand-edited index, an interrupted earlier delete), so a retry finishes
+    the job instead of leaving orphans that link to a memo that no longer
+    exists. Only lines carrying our `^mb-` ref qualify — a hand-written line
+    that merely mentions the memo is the owner's, and stays.
+    """
+    match = BLOCK_REF_RE.search(line)
+    if not match:
+        return False
+    return match.group(1) in ids or f"[[{memo_name}]]" in line
+
+
+def _rewrite(path: Path, content: str) -> None:
+    """Replace a file's content without ever leaving it half-written."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        raise VaultWriteError(f"Cannot rewrite {path}: {exc}") from exc
+
+
+def remove_memo(memo_name: str, settings: Settings, *, dry_run: bool = False) -> MemoRemoval:
+    """Drop every atom filed from `memo_name`: index lines and topic bullets.
+
+    The memo file itself is the caller's to delete — do it *after* this, so a
+    failure here leaves a memo that can simply be deleted again, never derived
+    data pointing at a memo that is gone. Topic pages are edited line by line
+    (hand edits survive) and are kept even when emptied: the page may hold
+    notes of your own, and an empty topic is cheap.
+    """
+    atoms = [stored for stored in iter_index(settings) if stored.memo == memo_name]
+    ids = {stored.id for stored in atoms}
+
+    bullets: dict[Path, int] = {}
+    rewritten: dict[Path, str] = {}
+    for page in iter_topic_pages(settings):
+        try:
+            lines = page.read_text(encoding="utf-8").splitlines(keepends=True)
+        except OSError as exc:
+            raise VaultWriteError(f"Cannot read topic page {page}: {exc}") from exc
+        kept = [line for line in lines if not _is_memo_bullet(line, memo_name, ids)]
+        if len(kept) != len(lines):
+            bullets[page] = len(lines) - len(kept)
+            rewritten[page] = "".join(kept)
+
+    if not dry_run:
+        path = index_path(settings)
+        if atoms:
+            content = path.read_text(encoding="utf-8")
+            kept_lines = []
+            for line in content.splitlines(keepends=True):
+                try:
+                    if json.loads(line).get("memo") == memo_name:
+                        continue
+                except (json.JSONDecodeError, AttributeError):
+                    pass  # not ours to judge; keep it as it was
+                kept_lines.append(line)
+            _rewrite(path, "".join(kept_lines))
+        for page, content in rewritten.items():
+            _rewrite(page, content)
+        logger.info(
+            "Removed %d atom(s) and %d bullet(s) of %s.",
+            len(atoms),
+            sum(bullets.values()),
+            memo_name,
+        )
+
+    return MemoRemoval(atoms=atoms, bullets=bullets)
+
+
 def search(
     settings: Settings,
     query: str = "",
@@ -369,6 +452,8 @@ __all__ = [
     "iter_index",
     "iter_topic_pages",
     "known_topics",
+    "MemoRemoval",
+    "remove_memo",
     "search",
     "topic_counts",
     "topic_page_path",

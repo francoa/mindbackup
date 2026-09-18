@@ -1,4 +1,4 @@
-"""CLI: `mindbackup doctor | ingest | bot`.
+"""CLI: `mindbackup doctor | ingest | bot | extract | ask | delete`.
 
 Output split, deliberately:
   - `out()` / `err()` write the human-facing report to stdout/stderr, so
@@ -403,6 +403,58 @@ def cmd_ask(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_delete(args: argparse.Namespace, settings: Settings) -> int:
+    """Admin: remove a memo and everything filed from it. CLI-only on purpose."""
+    from mindbackup.topics import remove_memo
+
+    if not args.memo.endswith(".md"):
+        args.memo += ".md"
+    try:
+        memo_path: Path | None = _memo_targets(args, settings)[0]
+    except FileNotFoundError:
+        # The memo may already be gone by hand; its atoms and bullets can
+        # still be cleaned up by name.
+        memo_path = None
+    memo_name = memo_path.stem if memo_path else Path(args.memo).stem
+
+    plan = remove_memo(memo_name, settings, dry_run=True)
+    if memo_path is None and not plan.atoms and not plan.bullets:
+        err(f"{BAD} No such memo, and nothing filed from it: {memo_name}")
+        return 1
+
+    out(f"\n{memo_name}")
+    if memo_path:
+        out(f"   memo:  {memo_path}")
+    else:
+        out(f"   {WARN} memo file already gone — cleaning up what was filed from it")
+    out(f"   atoms: {len(plan.atoms)} in the index")
+    for page, count in plan.bullets.items():
+        out(f"   topic: {page.relative_to(settings.topic_path)} ({count} bullet(s))")
+    out("")
+
+    if args.dry_run:
+        out(f"{OK} Dry run — nothing deleted.")
+        return 0
+    if not args.yes and _ask("Delete all of this? [y/N] ").lower() not in ("y", "yes"):
+        out("Nothing deleted.")
+        return 1
+
+    try:
+        # Derived data first: if this fails the memo is still there to retry.
+        removal = remove_memo(memo_name, settings)
+        if memo_path:
+            memo_path.unlink()
+    except (VaultWriteError, OSError) as exc:
+        err(f"{BAD} {exc}")
+        return 1
+
+    out(
+        f"{OK} Deleted {memo_name}: {len(removal.atoms)} atom(s), "
+        f"{sum(removal.bullets.values())} topic bullet(s)."
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mindbackup",
@@ -458,6 +510,19 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--topics", action="store_true", help="list known topics and exit")
     ask.add_argument("--limit", type=int, default=50, help="max results (default 50)")
     ask.set_defaults(func=cmd_ask)
+
+    delete = sub.add_parser(
+        "delete",
+        help="admin: delete a memo and everything filed from it",
+        description=(
+            "Deletes the memo, its atoms from the index and its bullets from "
+            "the topic pages. Asks first. Archived audio is left alone."
+        ),
+    )
+    delete.add_argument("memo", help="memo file name, with or without .md (e.g. 2026-09-18_3)")
+    delete.add_argument("--dry-run", action="store_true", help="show what would go, delete nothing")
+    delete.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+    delete.set_defaults(func=cmd_delete)
 
     return parser
 

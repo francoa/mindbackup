@@ -31,6 +31,11 @@ extract:
 ask:
 	echo "What do you want to know?" && read query && {{ docker_compose_executable }} run --rm {{ service_name }} ask $query
 
+# Admin: delete a memo plus its atoms and topic bullets. Asks before deleting.
+# e.g. `just delete-memo 2026-09-18_3` or `just delete-memo 2026-09-18_3 --dry-run`
+delete-memo memo *flags:
+	{{ docker_compose_executable }} run --rm {{ service_name }} delete {{ memo }} {{ flags }}
+
 start:
 	{{ docker_compose_executable }} {{ docker_compose_file }} up {{ service_name }}
 

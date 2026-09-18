@@ -106,6 +106,7 @@ mindbackup ingest path/to/audio.ogg     # same pipeline, no Telegram
 mindbackup extract                      # summarise + file new memos
 mindbackup extract --interactive        # confirm each atom before it is filed
 mindbackup doctor                       # preflight checks
+mindbackup delete 2026-09-18_3          # admin: memo + its atoms + topic bullets
 ```
 
 `ingest` runs the *identical* code path the bot does, so if it works here it
