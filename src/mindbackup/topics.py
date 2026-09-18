@@ -304,7 +304,7 @@ def file_atoms(
     known_ids = {existing.id for existing in iter_index(settings)}
 
     for atom in atoms:
-        text = atom.get_text().strip()
+        text = atom.text.strip()
         if not text:
             continue
         stored = StoredAtom(

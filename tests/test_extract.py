@@ -114,17 +114,20 @@ def test_bad_kind_and_topics_are_normalised(settings, monkeypatch):
     assert result.atoms[0].confidence == 1.0, "unparseable confidence falls back"
 
 
-def test_extract_memo_files_every_atom_flagging_the_ambiguous_one(settings, fake_llm):
+def test_extract_memo_files_every_atom_including_the_ambiguous_one(settings, fake_llm):
     memo = write_memo(TRANSCRIPT, date(2026, 9, 6), settings.memo_path)
     result = pipeline.extract_memo(memo.path, settings)
 
     assert len(result.atoms) == 3
-    # An ambiguous atom is filed rather than dropped, carrying the question
-    # with it, so nothing said is lost while clarification is still manual.
+    # The batch path has nobody to ask, so it approves the lot rather than
+    # dropping what the model was unsure about: nothing said is lost.
     assert len(result.filed) == 3
-    ambiguous = [a for a in result.filed if "AMBIGUITY:" in a.text]
-    assert len(ambiguous) == 1, "the ambiguous atom is filed, marked as such"
-    assert "el de siempre" in ambiguous[0].text
+    ambiguous = [a for a in result.filed if "el de siempre" in a.text]
+    assert len(ambiguous) == 1
+    # The question itself is confirmation state, not content. It belongs to the
+    # proposal; it must never reach the vault glued onto the sentence.
+    assert "AMBIGUITY" not in ambiguous[0].text
+    assert result.extraction.ambiguous[0].ambiguity, "the question is still on the atom"
 
     # Topic pages exist and carry a link home to the memo.
     page = settings.topic_path / "voice-mind-backup.md"

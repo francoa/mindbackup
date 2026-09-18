@@ -103,11 +103,20 @@ run it again whenever something feels broken.
 ```bash
 mindbackup bot                          # long-polling Telegram bot
 mindbackup ingest path/to/audio.ogg     # same pipeline, no Telegram
+mindbackup extract                      # summarise + file new memos
+mindbackup extract --interactive        # confirm each atom before it is filed
 mindbackup doctor                       # preflight checks
 ```
 
 `ingest` runs the *identical* code path the bot does, so if it works here it
 works from the phone.
+
+`extract` files everything it finds, including the atoms the model was unsure
+about — there is nobody to ask in a batch run, and it says so. `--interactive`
+is the one that asks: per atom, approve it, reject it, or give it the topics the
+model could not work out. `--dry-run` builds the same proposal and prints it
+without writing anything. The Telegram review buttons drive the same object, so
+an atom the bot holds back is never one the CLI quietly files.
 
 ### Telegram commands
 

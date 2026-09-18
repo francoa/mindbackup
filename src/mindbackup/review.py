@@ -1,5 +1,9 @@
 """Telegram review UI for extracted atoms.
 
+Rendering and keyboards only. What an approval *means* — which atoms get
+filed, what a resolved ambiguity does to an atom — lives in
+`proposal.Proposal`, so the bot and the CLI cannot drift apart on it.
+
 The design rule that matters: **the memo is already saved before any of this
 runs**. Extraction is a follow-up message, never a gate. If the user ignores
 the buttons, walks away, or the model is down, the transcript is still in the
@@ -12,12 +16,8 @@ without a Telegram server.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import date
 
-from .config import Settings
-from .extract import Atom, Extraction
-from .topics import file_atoms
+from .extract import Extraction
 
 logger = logging.getLogger(__name__)
 
@@ -26,30 +26,6 @@ CB_APPROVE = "mb:ok"
 CB_EDIT = "mb:edit"
 CB_DISCARD = "mb:no"
 CB_RESOLVE = "mb:res"
-
-
-@dataclass
-class PendingReview:
-    """Atoms awaiting the user's yes/no, keyed by the review message id.
-
-    Held in `bot_data` (process memory): a restart loses pending reviews, and
-    that is the correct trade — the memo is safe on disk and `mindbackup
-    extract` can always re-derive the atoms later.
-    """
-
-    memo_name: str
-    memo_date: str
-    atoms: list[Atom]
-    audio: str | None = None
-    resolved: dict[int, str] = field(default_factory=dict)
-
-    @property
-    def confident(self) -> list[Atom]:
-        return [a for a in self.atoms if not a.needs_clarification]
-
-    @property
-    def ambiguous(self) -> list[Atom]:
-        return [a for a in self.atoms if a.needs_clarification]
 
 
 def _escape(text: str) -> str:
@@ -100,26 +76,6 @@ def review_keyboard(extraction: Extraction):
     )
 
 
-def apply_review(review: PendingReview, settings: Settings) -> list:
-    """File the approved atoms. Returns what was filed."""
-    approved = list(review.confident)
-    for index, topic in review.resolved.items():
-        if 0 <= index < len(review.atoms):
-            atom = review.atoms[index]
-            atom.topics = [topic]
-            atom.ambiguity = None
-            atom.confidence = 1.0
-            approved.append(atom)
-
-    return file_atoms(
-        approved,
-        review.memo_name,
-        review.memo_date or date.today(),
-        settings,
-        audio=review.audio,
-    )
-
-
 def render_filed(filed: list) -> str:
     if not filed:
         return "Nothing filed."
@@ -137,8 +93,6 @@ __all__ = [
     "CB_DISCARD",
     "CB_EDIT",
     "CB_RESOLVE",
-    "PendingReview",
-    "apply_review",
     "render_filed",
     "render_review",
     "review_keyboard",

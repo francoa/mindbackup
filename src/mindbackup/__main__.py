@@ -20,6 +20,7 @@ from pathlib import Path
 from mindbackup.config import ConfigError, Settings, load_settings
 from mindbackup.extract import KINDS
 from mindbackup.pipeline import TranscriptionError, VaultWriteError, ingest_audio
+from mindbackup.topics import known_topics
 
 logger = logging.getLogger(__name__)
 
@@ -221,9 +222,56 @@ def _render_atom(atom, prefix: str = "   ") -> str:
     return line
 
 
+def _ask(prompt: str) -> str:
+    """One line from the user. EOF (piped stdin, Ctrl-D) reads as "quit"."""
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        out("")
+        return "q"
+
+
+def _ask_topics(known: list[str]) -> list[str]:
+    """Which topics this atom really belongs to, answering the model's question."""
+    if known:
+        shown = ", ".join(known[:20]) + ("…" if len(known) > 20 else "")
+        out(f"            known: {shown}")
+    raw = _ask("            topics (comma-separated): ")
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _confirm_interactively(proposal, settings: Settings) -> bool:
+    """Walk the pending atoms with the user. False means they quit early.
+
+    Note what is *not* here: no filing, no ambiguity handling, no stage
+    ordering. Rendering and prompting only — the same operations the bot's
+    buttons call. That is the test of whether `Proposal` is the right object.
+    """
+    known = known_topics(settings)
+
+    for index, atom in proposal.pending():
+        out("")
+        out(_render_atom(atom))
+        while True:
+            answer = (_ask("            [a]pprove / [r]eject / [t]opics / [q]uit: ") or "a").lower()
+            if answer == "a":
+                proposal.approve(index)
+            elif answer == "r":
+                proposal.reject(index)
+            elif answer == "t":
+                proposal.reassign(index, _ask_topics(known))
+            elif answer == "q":
+                return False
+            else:
+                err("            ? answer a, r, t or q.")
+                continue
+            break
+    return True
+
+
 def cmd_extract(args: argparse.Namespace, settings: Settings) -> int:
     """Run the summariser + classifier over memos already in the vault."""
-    from mindbackup.pipeline import LLMError, extract_memo
+    from mindbackup.pipeline import LLMError, propose_from_memo
     from mindbackup.topics import iter_index
 
     try:
@@ -248,12 +296,14 @@ def cmd_extract(args: argparse.Namespace, settings: Settings) -> int:
     if args.limit:
         memos = memos[: args.limit]
 
-    total_atoms = total_filed = failures = 0
+    total_atoms = total_filed = total_held = failures = 0
+    reviewed = 0
 
     for memo_path in memos:
+        reviewed += 1
         out(f"\n{memo_path.name}")
         try:
-            result = extract_memo(memo_path, settings, file=not args.dry_run)
+            proposal = propose_from_memo(memo_path, settings)
         except LLMError as exc:
             err(f" {BAD} {exc}")
             failures += 1
@@ -263,23 +313,50 @@ def cmd_extract(args: argparse.Namespace, settings: Settings) -> int:
             failures += 1
             continue
 
-        if result.extraction.summary:
-            out(f"   … {result.extraction.summary}")
-        if not result.atoms:
+        if proposal.summary:
+            out(f"   … {proposal.summary}")
+        if not proposal.atoms:
             out(f"   {WARN} nothing worth extracting")
             continue
 
-        for atom in result.atoms:
-            out(_render_atom(atom))
-        total_atoms += len(result.atoms)
-        total_filed += len(result.filed)
+        total_atoms += len(proposal.atoms)
+        finished = True
 
-        held = len(result.ambiguous)
-        if held:
-            out(f"   {WARN} {held} atom(s) held back pending your confirmation")
+        if args.interactive:
+            finished = _confirm_interactively(proposal, settings)
+        else:
+            for atom in proposal.atoms:
+                out(_render_atom(atom))
+            # No one to ask: the batch policy is to file the lot, unclear atoms
+            # included, and say so rather than pretending they were confirmed.
+            unclear = len(proposal.needs_clarification())
+            proposal.approve_all()
+            if unclear:
+                out(f"   {WARN} {unclear} atom(s) unclear — filed anyway (see --interactive)")
+
+        if args.dry_run:
+            # "Build the proposal, print it, never commit" — the flag enforced
+            # by not calling the one method that writes, rather than by a
+            # boolean threaded down two call levels.
+            total_filed += len(proposal.approved())
+        else:
+            try:
+                total_filed += len(proposal.commit(settings))
+            except VaultWriteError as exc:
+                err(f" {BAD} {exc}")
+                failures += 1
+                continue
+
+        total_held += len(proposal.pending())
+
+        if not finished:
+            out(f"   {WARN} stopped — {len(proposal.pending())} atom(s) left undecided")
+            break
 
     verb = "would file" if args.dry_run else "filed"
-    out(f"\n{OK} {len(memos)} memo(s): {total_atoms} atom(s), {verb} {total_filed}.")
+    out(f"\n{OK} {reviewed} memo(s): {total_atoms} atom(s), {verb} {total_filed}.")
+    if total_held:
+        out(f"{WARN} {total_held} atom(s) left undecided — not filed, not lost.")
     if failures:
         err(f"{BAD} {failures} memo(s) failed.")
         return 1
@@ -358,6 +435,12 @@ def build_parser() -> argparse.ArgumentParser:
     extract.add_argument("memo", nargs="?", help="one memo file (default: all new ones)")
     extract.add_argument("--all", action="store_true", help="re-extract already-processed memos")
     extract.add_argument("--dry-run", action="store_true", help="show atoms, write nothing")
+    extract.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="confirm each atom before filing (approve / reject / retopic)",
+    )
     extract.add_argument("--limit", type=int, help="stop after N memos")
     extract.set_defaults(func=cmd_extract)
 

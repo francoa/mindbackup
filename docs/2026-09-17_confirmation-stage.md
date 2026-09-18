@@ -1,6 +1,6 @@
 # Confirmation as a real pipeline stage
 
-Status: proposed
+Status: implemented (2026-09-18)
 Date: 2026-09-17
 
 ## The problem
@@ -185,3 +185,32 @@ end-to-end coverage.
 Do this before the transport split and well before subtopics. It is the only
 one of the three with an actual bug behind it, and it is self-contained enough
 to land in a single sitting.
+
+## As built
+
+Two places where the implementation had to differ from the note above.
+
+**`approve_confident()` exists.** The note lists `approve` / `approve_all` /
+`reject` / `reassign`, but the bot's single ✅ button means "file what the model
+was sure of, hold the rest" — `approve_all` would file an unresolved atom on a
+guess. So there are two batch policies, both named: `approve_all()` for the CLI
+(file the lot) and `approve_confident()` for the bot (hold the unclear ones).
+Every atom starts pending, which is what keeps `pending()` and
+`needs_clarification()` from being the same query.
+
+**One test in `test_extract.py` changed.** The note predicts it passes
+untouched; it cannot.
+`test_extract_memo_files_every_atom_flagging_the_ambiguous_one` asserted
+`"AMBIGUITY:" in a.text` — it *encoded* the workaround being deleted. It now
+asserts the complement: the atom is still filed, its text is clean, and the
+question stays on the proposal. `test_pipeline.py` passed untouched.
+
+One consequence worth knowing: an ambiguous atom filed before this change has a
+block id derived from the text *including* the `--- AMBIGUITY: …` suffix.
+Re-extracting that memo with `--all` will append a second, clean bullet rather
+than recognising the old one. Only affects already-filed ambiguous atoms.
+
+`tests/test_proposal.py` holds the filing behaviour migrated off
+`PendingReview`; `tests/test_review.py` keeps the rendering tests and gains the
+end-to-end bot flow (voice note → review message → approve → vault) that the
+Verification section called out as uncovered.

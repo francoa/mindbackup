@@ -16,8 +16,9 @@ from pathlib import Path
 
 from .config import Settings
 from .extract import Atom, Extraction, LLMError, extract_atoms
+from .proposal import Proposal
 from .stt import Transcript, TranscriptionError, transcribe
-from .topics import StoredAtom, file_atoms, known_topics
+from .topics import StoredAtom, known_topics
 from .vault import Memo, VaultWriteError, write_memo
 
 logger = logging.getLogger(__name__)
@@ -170,51 +171,80 @@ def memo_date_from_path(path: Path) -> str:
     return match.group(1) if match else ""
 
 
+def propose_from_transcript(
+    text: str,
+    memo_name: str,
+    memo_date: str,
+    settings: Settings,
+    *,
+    audio: str | None = None,
+) -> Proposal:
+    """Extract atoms from a transcript already in hand, and await a decision.
+
+    What the bot needs after `ingest_audio`: it has the transcript in memory
+    and should not re-read the memo off disk to get it back.
+
+    Raises LLMError if the model is unreachable. Callers in the ingest path
+    must catch it — a failed extraction degrades a memo, it must not lose one.
+    """
+    extraction = extract_atoms(text, settings, known_topics(settings))
+    return Proposal(
+        memo_name=memo_name,
+        memo_date=memo_date,
+        extraction=extraction,
+        audio=audio,
+    )
+
+
+def propose_from_memo(memo_path: Path, settings: Settings) -> Proposal:
+    """Same, for a memo already in the vault.
+
+    Read-only with respect to the memo itself (C4): extraction never edits the
+    raw transcript, it only writes derived topic pages and the atom index —
+    and not even those until the proposal is committed.
+    """
+    return propose_from_transcript(
+        read_memo_body(memo_path),
+        memo_path.stem,
+        memo_date_from_path(memo_path) or local_today(settings).isoformat(),
+        settings,
+    )
+
+
 def extract_memo(
     memo_path: Path,
     settings: Settings,
     *,
     file: bool = True,
 ) -> ExtractionResult:
-    """Run the intelligence layer over one memo already in the vault.
+    """Run the intelligence layer over one memo, filing everything it finds.
 
-    Read-only with respect to the memo itself (C4): extraction never edits the
-    raw transcript, it only writes derived topic pages and the atom index.
+    The batch policy, expressed over `Proposal`: nothing here asks the user, so
+    it approves the lot — including the atoms the model was unsure about. That
+    is a choice, and `--interactive` is the one that does ask.
 
-    Raises LLMError if the model is unreachable. Callers in the ingest path
-    must catch it — a failed extraction degrades a memo, it must not lose one.
+    Raises LLMError if the model is unreachable.
     """
-    transcript = read_memo_body(memo_path)
-    extraction = extract_atoms(transcript, settings, known_topics(settings))
+    proposal = propose_from_memo(memo_path, settings)
+    proposal.approve_all()
+    filed = proposal.commit(settings) if file else []
 
-    filed: list[StoredAtom] = []
-    if file and extraction.atoms:
-        # Ambiguous atoms are held back for the user to confirm; filing a wrong
-        # classification is worse than filing none (spec C6).
-        # TODO: Atoms that need clarification are going to be recorded for the moment
-        #   I'd rather have these being recorded with a warning than not recorded at all
-        # Restore this when appropriate:
-        #   confident = [a for a in extraction.atoms if not a.needs_clarification]
-        filed = file_atoms(
-            extraction.atoms,
-            memo_path.stem,
-            memo_date_from_path(memo_path) or local_today(settings),
-            settings,
-        )
-
-    return ExtractionResult(memo_path=memo_path, extraction=extraction, filed=filed)
+    return ExtractionResult(memo_path=memo_path, extraction=proposal.extraction, filed=filed)
 
 
 __all__ = [
     "ExtractionResult",
     "IngestResult",
     "LLMError",
+    "Proposal",
     "TranscriptionError",
     "VaultWriteError",
     "extract_memo",
     "ingest_audio",
     "local_today",
     "memo_date_from_path",
+    "propose_from_memo",
+    "propose_from_transcript",
     "read_memo_body",
     "resolve_memo_date",
 ]

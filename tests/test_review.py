@@ -1,5 +1,9 @@
 """Tests for the Telegram review layer.
 
+Rendering and the bot handler only. What an approval *files* moved to
+`test_proposal.py` along with the logic itself — this layer draws the message
+and the buttons, nothing more.
+
 The load-bearing test here is `test_extraction_failure_still_confirms_saved`:
 the M1 guarantee is that a memo reaches the vault and the user is told. The
 intelligence layer is allowed to fail; it is not allowed to break that.
@@ -18,13 +22,9 @@ from mindbackup import bot as bot_mod
 from mindbackup import extract as extract_mod
 from mindbackup.config import Settings
 from mindbackup.extract import Atom, Extraction
-from mindbackup.review import (
-    PendingReview,
-    apply_review,
-    render_filed,
-    render_review,
-)
-from mindbackup.topics import search
+from mindbackup.proposal import Proposal
+from mindbackup.review import CB_APPROVE, CB_DISCARD, render_filed, render_review
+from mindbackup.topics import iter_index
 from mindbackup.vault import write_memo
 
 
@@ -74,55 +74,6 @@ def test_render_filed_handles_nothing_filed():
     assert render_filed([]) == "Nothing filed."
 
 
-# --- applying the review ---------------------------------------------------
-
-
-def test_apply_review_files_only_confident_atoms(settings):
-    review = PendingReview(memo_name="2026-09-06", memo_date="2026-09-06", atoms=_atoms())
-    filed = apply_review(review, settings)
-
-    assert len(filed) == 2, "the ambiguous atom must not be filed unresolved"
-    assert {f.text for f in filed} == {"Fix search.", "Buy grip."}
-
-
-def test_apply_review_files_resolved_ambiguous_atoms(settings):
-    review = PendingReview(memo_name="2026-09-06", memo_date="2026-09-06", atoms=_atoms())
-    review.resolved[2] = "coach"  # user answered "who is him?"
-
-    filed = apply_review(review, settings)
-
-    assert len(filed) == 3
-    resolved = next(f for f in filed if f.text == "Talk to him.")
-    assert resolved.topics == ["coach"]
-
-
-def test_apply_review_records_audio_backref(settings):
-    """The audio backref lives in the index, not on the topic page.
-
-    The page shows only the memo link; the recording is named after the memo,
-    so printing it there was the link repeated.
-    """
-    review = PendingReview(
-        memo_name="2026-09-06",
-        memo_date="2026-09-06",
-        atoms=[Atom(text="Fix search.", topics=["voice-mind-backup"])],
-        audio="2026-09-06.ogg",
-    )
-    filed = apply_review(review, settings)
-
-    assert filed[0].audio == "2026-09-06.ogg", "must link back to the audio"
-    page = (settings.topic_path / "voice-mind-backup.md").read_text(encoding="utf-8")
-    assert ".ogg" not in page
-    assert "[[2026-09-06]]" in page
-
-
-def test_filed_atoms_are_searchable(settings):
-    review = PendingReview(memo_name="2026-09-06", memo_date="2026-09-06", atoms=_atoms())
-    apply_review(review, settings)
-
-    assert len(search(settings, "grip")) == 1
-
-
 # --- the M1 guarantee ------------------------------------------------------
 
 
@@ -152,7 +103,7 @@ def test_extraction_failure_still_confirms_saved(settings, monkeypatch, tmp_path
     def _boom(*args, **kwargs):
         raise extract_mod.LLMError("model is down")
 
-    monkeypatch.setattr(bot_mod, "extract_atoms", _boom)
+    monkeypatch.setattr(bot_mod, "propose_from_transcript", _boom)
 
     @dataclass
     class FakeTranscript:
@@ -204,3 +155,115 @@ def test_extraction_skipped_when_llm_unconfigured(tmp_path):
     asyncio.run(bot_mod._offer_extraction(FakeUpdate(), FakeContext(), object(), settings))
 
     assert message.texts == [], "unconfigured LLM must produce no messages at all"
+
+
+# --- the review flow, end to end -------------------------------------------
+
+
+@dataclass
+class FakeQuery:
+    """The half of `telegram.CallbackQuery` the review handler actually uses."""
+
+    data: str
+    message: FakeMessage
+    texts: list = None
+
+    def __post_init__(self):
+        self.texts = []
+
+    async def answer(self):
+        return None
+
+    async def edit_message_text(self, text, **kwargs):
+        self.texts.append(text)
+        return self.message
+
+
+def _run_review(settings, monkeypatch, memo, button: str):
+    """Offer an extraction, then press one of its buttons. Returns what was said."""
+
+    def _fake_propose(text, memo_name, memo_date, settings_, *, audio=None):
+        return Proposal(
+            memo_name=memo_name,
+            memo_date=memo_date,
+            extraction=Extraction(atoms=_atoms(), summary="s"),
+            audio=audio,
+        )
+
+    monkeypatch.setattr(bot_mod, "propose_from_transcript", _fake_propose)
+    # The keyboard needs the telegram package; the message text is what we assert on.
+    monkeypatch.setattr(bot_mod, "review_keyboard", lambda extraction: None)
+
+    message = FakeMessage()
+    bot_data: dict = {"settings": settings}
+
+    class FakeApp:
+        pass
+
+    FakeApp.bot_data = bot_data
+
+    class FakeUser:
+        id = 42
+
+    class FakeUpdate:
+        effective_message = message
+        effective_user = FakeUser()
+        callback_query = None
+
+    class FakeContext:
+        application = FakeApp()
+
+    @dataclass
+    class FakeTranscript:
+        text: str = "some transcript"
+
+    @dataclass
+    class FakeResult:
+        memo: object
+        transcript: object
+        archived_audio: object = None
+
+    asyncio.run(
+        bot_mod._offer_extraction(
+            FakeUpdate(),
+            FakeContext(),
+            FakeResult(memo=memo, transcript=FakeTranscript()),
+            settings,
+        )
+    )
+
+    assert bot_data["reviews"][message.message_id], "the proposal must be kept to act on"
+
+    query = FakeQuery(data=button, message=message)
+
+    class FakeCallbackUpdate:
+        effective_message = message
+        effective_user = FakeUser()
+        callback_query = query
+
+    asyncio.run(bot_mod.handle_review_button(FakeCallbackUpdate(), FakeContext()))
+    return query.texts, bot_data
+
+
+def test_approving_files_the_confident_atoms_and_holds_the_rest(settings, monkeypatch):
+    """The path with no end-to-end coverage before: voice note -> ✅ -> vault."""
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    texts, bot_data = _run_review(settings, monkeypatch, memo, CB_APPROVE)
+
+    filed = list(iter_index(settings))
+    assert {a.text for a in filed} == {"Fix search.", "Buy grip."}
+    assert "Talk to him." not in {a.text for a in filed}, "unclear atoms need a human first"
+    assert "Filed 2" in texts[-1], "the user must be told what happened"
+    assert not bot_data["reviews"], "an actioned review must not linger"
+
+
+def test_discarding_writes_nothing(settings, monkeypatch):
+    memo = write_memo("some transcript", date(2026, 9, 6), settings.memo_path)
+
+    texts, bot_data = _run_review(settings, monkeypatch, memo, CB_DISCARD)
+
+    assert list(iter_index(settings)) == [], "discard must not reach the vault"
+    assert "Discarded" in texts[-1]
+    assert memo.path.is_file(), "the transcript survives a discarded extraction"
+    assert not bot_data["reviews"]

@@ -10,8 +10,10 @@ transcript, tagged with the topics it belongs to. Two jobs, one model call:
      underwhelming": you search for a name you never said out loud.
 
 Where a referent cannot be resolved confidently, the atom carries an
-`ambiguity` and the caller asks the user — precision on demand, rather than a
-category menu in front of every memo (spec C3: input friction is the thesis).
+`ambiguity` and the caller asks the user — precision on demand, rather
+than a category menu in front of every memo (spec C3: input friction is
+the thesis). The asking happens over a `proposal.Proposal`; nothing here
+decides what to do with an unresolved atom.
 
 Nothing here mutates the raw transcript layer (C4).
 """
@@ -97,12 +99,6 @@ class Atom:
             confidence=_clean_confidence(data.get("confidence")),
             ambiguity=(str(data["ambiguity"]).strip() or None) if data.get("ambiguity") else None,
         )
-
-    def get_text(self) -> str:
-        # TODO: remove when ambiguity can be resolved by user input
-        if self.needs_clarification:
-            return f"{self.text} --- AMBIGUITY: {self.ambiguity}"
-        return self.text
 
 
 @dataclass

@@ -38,13 +38,18 @@ from mindbackup.browse import (
     topics_keyboard,
 )
 from mindbackup.config import Settings, load_settings
-from mindbackup.extract import LLMError, extract_atoms
-from mindbackup.pipeline import TranscriptionError, VaultWriteError, ingest_audio, local_today
+from mindbackup.pipeline import (
+    LLMError,
+    TranscriptionError,
+    VaultWriteError,
+    ingest_audio,
+    local_today,
+    propose_from_transcript,
+)
+from mindbackup.proposal import Proposal
 from mindbackup.review import (
     CB_DISCARD,
     CB_EDIT,
-    PendingReview,
-    apply_review,
     render_filed,
     render_review,
     review_keyboard,
@@ -257,6 +262,10 @@ async def _offer_extraction(
 
     Non-blocking by construction: the user may ignore this entirely. Any
     failure degrades to a short note, because the memo is already saved.
+
+    Goes through the pipeline rather than calling `extract_atoms` itself, so
+    stage ordering has exactly one owner and an atom the bot holds back is not
+    one the CLI would have filed.
     """
     if not settings.llm_configured:
         return
@@ -268,11 +277,13 @@ async def _offer_extraction(
     thinking = await message.reply_text("🧠 Extracting…")
 
     try:
-        extraction = await asyncio.to_thread(
-            extract_atoms,
+        proposal = await asyncio.to_thread(
+            propose_from_transcript,
             result.transcript.text,
+            result.memo.path.stem,
+            result.memo.memo_date.isoformat(),
             settings,
-            known_topics(settings),
+            audio=result.archived_audio.name if result.archived_audio else None,
         )
     except LLMError as exc:
         logger.warning("Extraction failed for %s: %s", result.memo.path.name, exc)
@@ -286,28 +297,21 @@ async def _offer_extraction(
         await thinking.edit_text(f"⚠️ Saved, but extraction failed: {type(exc).__name__}: {exc}")
         return
 
-    if not extraction.atoms:
+    if not proposal.atoms:
         await thinking.edit_text("🧠 Nothing worth extracting from that one.")
         return
 
-    review = PendingReview(
-        memo_name=result.memo.path.stem,
-        memo_date=result.memo.memo_date.isoformat(),
-        atoms=extraction.atoms,
-        audio=result.archived_audio.name if result.archived_audio else None,
-    )
-
     sent = await thinking.edit_text(
-        render_review(extraction, result.memo.path.name),
+        render_review(proposal.extraction, result.memo.path.name),
         parse_mode="Markdown",
-        reply_markup=review_keyboard(extraction),
+        reply_markup=review_keyboard(proposal.extraction),
     )
     # edit_text returns True (not a Message) when the edit is a no-op; without
-    # a message id there is nothing to key the pending review on.
+    # a message id there is nothing to key the pending proposal on.
     if isinstance(sent, bool):
         logger.warning("Could not track review message for %s.", result.memo.path.name)
         return
-    context.application.bot_data.setdefault("reviews", {})[sent.message_id] = review
+    context.application.bot_data.setdefault("reviews", {})[sent.message_id] = proposal
 
 
 @authorizer
@@ -321,9 +325,9 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
 
     reviews: dict = context.application.bot_data.setdefault("reviews", {})
     message = query.message
-    review = reviews.get(message.message_id) if message else None
+    proposal = reviews.get(message.message_id) if message else None
 
-    if message is None or review is None:
+    if message is None or proposal is None:
         # Bot restarted, or already actioned. Say so rather than failing mutely.
         await query.edit_message_text(
             "⌛ That review expired. Run `mindbackup extract` to redo it.",
@@ -338,15 +342,18 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if query.data == CB_EDIT:
         await query.edit_message_text(
-            f"{render_review_plain(review)}\n\n"
+            f"{render_review_plain(proposal)}\n\n"
             "✏️ Editing in Telegram isn't built yet — edit the topic pages in "
             "Obsidian, or re-run `mindbackup extract --all`.",
             parse_mode="Markdown",
         )
         return
 
+    # One tap files what the model was sure of; an unclear atom stays pending
+    # rather than being filed on a guess (spec C6).
+    proposal.approve_confident()
     try:
-        filed = await asyncio.to_thread(apply_review, review, settings)
+        filed = await asyncio.to_thread(proposal.commit, settings)
     except VaultWriteError as exc:
         await query.edit_message_text(f"❌ Could not file: {exc}")
         return
@@ -355,9 +362,9 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.edit_message_text(render_filed(filed), parse_mode="Markdown")
 
 
-def render_review_plain(review: PendingReview) -> str:
-    lines = [f"🧠 From *{review.memo_name}*:", ""]
-    for index, atom in enumerate(review.atoms, start=1):
+def render_review_plain(proposal: Proposal) -> str:
+    lines = [f"🧠 From *{proposal.memo_name}*:", ""]
+    for index, atom in enumerate(proposal.atoms, start=1):
         lines.append(f"• {index}. {atom.text}")
     return "\n".join(lines)
 

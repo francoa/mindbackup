@@ -79,19 +79,19 @@ def fake_complete_json(settings, system, user, **kwargs):
 
 
 # Route the stub by which memo is being extracted. The CLI imports
-# extract_memo from the pipeline module at call time, so patching the module
-# attribute is the seam that actually takes effect.
+# propose_from_memo from the pipeline module at call time, so patching the
+# module attribute is the seam that actually takes effect.
 import mindbackup.pipeline as pipeline_mod  # noqa: E402
 
-_real_extract_memo = pipeline_mod.extract_memo
+_real_propose_from_memo = pipeline_mod.propose_from_memo
 
 
-def traced_extract_memo(memo_path, settings, **kwargs):
+def traced_propose_from_memo(memo_path, settings, **kwargs):
     _current["memo"] = memo_path.stem
-    return _real_extract_memo(memo_path, settings, **kwargs)
+    return _real_propose_from_memo(memo_path, settings, **kwargs)
 
 
-pipeline_mod.extract_memo = traced_extract_memo
+pipeline_mod.propose_from_memo = traced_propose_from_memo
 extract_mod.complete_json = fake_complete_json
 
 
