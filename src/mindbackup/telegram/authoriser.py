@@ -4,8 +4,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from mindbackup.bot_module.utils import get_settings
 from mindbackup.config import Settings
+from mindbackup.telegram.utils import get_settings
 
 logger = logging.getLogger(__name__)
 

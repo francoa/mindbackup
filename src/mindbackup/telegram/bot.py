@@ -26,19 +26,6 @@ from telegram.ext import (
     filters,
 )
 
-from mindbackup.bot_module.authoriser import authorizer
-from mindbackup.bot_module.utils import get_settings
-from mindbackup.browse import (
-    CB_PAGE,
-    CB_TOPIC,
-    TOPIC_TOKEN_BYTES,
-    back_keyboard,
-    chunk_message,
-    render_topic_list,
-    resolve_topic,
-    topic_body,
-    topics_keyboard,
-)
 from mindbackup.config import Settings, load_settings
 from mindbackup.pipeline import (
     LLMError,
@@ -49,28 +36,41 @@ from mindbackup.pipeline import (
     propose_from_transcript,
 )
 from mindbackup.proposal import Proposal, parse_topics
-from mindbackup.review import (
+from mindbackup.telegram.authoriser import authorizer
+from mindbackup.telegram.chunking import chunk_message
+from mindbackup.telegram.keyboards import (
     CB_APPROVE,
     CB_DISCARD,
     CB_DROP,
     CB_KEEP,
     CB_OVERVIEW,
+    CB_PAGE,
     CB_PICK,
     CB_PICK_NEW,
     CB_PICK_PAGE,
     CB_PICK_TOPIC,
     CB_REVIEW,
+    CB_TOPIC,
+    TOPIC_TOKEN_BYTES,
+    back_keyboard,
     picker_token_bytes,
+    resolve_token,
+    review_keyboard,
+    step_keyboard,
+    topic_picker_keyboard,
+    topics_keyboard,
+)
+from mindbackup.telegram.render_utils import (
     render_atom_step,
     render_filed,
     render_reassigned,
     render_review,
+    render_topic_list,
     render_topic_picker,
     render_topic_prompt,
-    review_keyboard,
-    step_keyboard,
-    topic_picker_keyboard,
 )
+from mindbackup.telegram.utils import get_settings
+from mindbackup.topic_view import topic_body
 from mindbackup.topics import known_topics, topic_counts
 from mindbackup.vault import iter_memos
 
@@ -134,7 +134,7 @@ async def cmd_get_topic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     requested = " ".join(context.args or []).strip()
     if requested:
-        match = resolve_topic(requested, topics, TOPIC_TOKEN_BYTES)
+        match = resolve_token(requested, topics, TOPIC_TOKEN_BYTES)
         if match is not None:
             await _send_topic(message, match, settings)
             return
@@ -190,7 +190,7 @@ async def handle_topic_button(update: Update, context: ContextTypes.DEFAULT_TYPE
     topics = known_topics(settings)
 
     if data.startswith(CB_TOPIC):
-        topic = resolve_topic(data[len(CB_TOPIC) :], topics, TOPIC_TOKEN_BYTES)
+        topic = resolve_token(data[len(CB_TOPIC) :], topics, TOPIC_TOKEN_BYTES)
         if topic is None:
             # The page was renamed or deleted in Obsidian since the list was drawn.
             await query.edit_message_text(
@@ -395,7 +395,7 @@ async def handle_review_button(update: Update, context: ContextTypes.DEFAULT_TYP
         if index is None:
             await query.answer("Already decided.")
             return
-        topic = resolve_topic(token, known_topics(settings), picker_token_bytes(index))
+        topic = resolve_token(token, known_topics(settings), picker_token_bytes(index))
         if topic is None:
             # Renamed or deleted in Obsidian since the picker was drawn.
             await query.answer("That topic is gone.")

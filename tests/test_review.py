@@ -21,13 +21,12 @@ from types import SimpleNamespace
 import pytest
 from telegram import ForceReply
 
-from mindbackup import bot as bot_mod
 from mindbackup import extract as extract_mod
-from mindbackup.browse import TOPIC_TOKEN_BYTES, resolve_topic
 from mindbackup.config import Settings
 from mindbackup.extract import Atom, Extraction
 from mindbackup.proposal import Proposal
-from mindbackup.review import (
+from mindbackup.telegram import bot as bot_mod
+from mindbackup.telegram.keyboards import (
     CB_APPROVE,
     CB_DISCARD,
     CB_DROP,
@@ -38,14 +37,14 @@ from mindbackup.review import (
     CB_PICK_PAGE,
     CB_PICK_TOPIC,
     CB_REVIEW,
-    MAX_ATOMS_SHOWN,
+    TOPIC_TOKEN_BYTES,
     picker_token_bytes,
-    render_filed,
-    render_review,
+    resolve_token,
     review_keyboard,
     step_keyboard,
     topic_picker_keyboard,
 )
+from mindbackup.telegram.render_utils import MAX_ATOMS_SHOWN, render_filed, render_review
 from mindbackup.topics import file_atoms, iter_index, topic_slug
 from mindbackup.vault import write_memo
 
@@ -692,7 +691,7 @@ def test_picker_callback_data_fits_telegrams_limit_on_every_page():
     for topic in (huge, borderline):
         button = _button(topic_picker_keyboard(12, topics, 0), topic)
         token = button.callback_data.split(":", 3)[3]
-        assert resolve_topic(token, topics, picker_token_bytes(12)) == topic
+        assert resolve_token(token, topics, picker_token_bytes(12)) == topic
 
 
 # --- new topics by text reply ----------------------------------------------

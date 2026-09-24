@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from mindbackup import __main__ as cli
 from mindbackup import topics
+from mindbackup.cli import __main__ as cli
 from mindbackup.config import Settings
 from mindbackup.extract import Atom
 from mindbackup.vault import write_memo
