@@ -35,11 +35,6 @@ FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime
 
 ARG WHISPER_MODEL
 
-# ffmpeg decodes Telegram's ogg/opus. No recommends: keeps the image lean.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
 # Unprivileged user. The vault is bind-mounted, so this uid must be able to
 # write it — override with `user:` in compose if your host uid differs.
 RUN groupadd --gid 1000 mindbackup \
@@ -54,7 +49,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     MINDBACKUP_AUDIO_ARCHIVE=/archive
 
 COPY --from=builder --chown=mindbackup:mindbackup /app/.venv /app/.venv
-COPY --chown=mindbackup:mindbackup src /app/src
 
 # Bake the model into the image (needs network at BUILD time only).
 # HF_HUB_OFFLINE is set above, so unset it just for this layer.
@@ -64,8 +58,23 @@ from faster_whisper import download_model; \
 download_model('${WHISPER_MODEL}', cache_dir='/opt/models')" \
     && chown -R mindbackup:mindbackup /opt/models
 
+# ffmpeg decodes Telegram's ogg/opus. No recommends: keeps the image lean.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --chown=mindbackup:mindbackup src /app/src
+
 WORKDIR /app
 USER mindbackup
+
+# Needed for some video processing. May be removed
+RUN curl -fsSL https://deno.land/install.sh | sh
+ENV PATH="/home/mindbackup/.deno/bin:$PATH"
 
 # Fails the build if the CLI can't even start.
 RUN mindbackup --help > /dev/null

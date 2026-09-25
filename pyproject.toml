@@ -5,6 +5,7 @@ description = "Voice memo -> transcript -> Obsidian vault. Milestone 1: ugly end
 requires-python = ">=3.10"
 dependencies = [
     "python-telegram-bot>=21.0",
+    "curl_cffi>=0.16.2",
 ]
 
 [project.optional-dependencies]

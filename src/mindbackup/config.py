@@ -60,10 +60,16 @@ def _get(key: str, default: str = "") -> str:
     return value.strip()
 
 
-def _get_from_secrets(secret_name: str, fallback_env_var: str = "") -> str:
-    secret_path = Path(f"/run/secrets/{secret_name}")
+def _get_from_secrets(
+    secret_name: str, fallback_env_var: str = "", secrets_dir: Path = Path("/run/secrets")
+) -> str:
+    secret_path = secrets_dir / secret_name
     if secret_path.exists():
-        return secret_path.read_text().strip()
+        value = secret_path.read_text().strip()
+        # Compose mounts every declared secret, so an empty file is how "this
+        # one lives in .env instead" looks from inside the container.
+        if value:
+            return value
 
     # Fallback to env var for local non-docker testing
     return _get(fallback_env_var)

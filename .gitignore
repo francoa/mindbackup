@@ -5,6 +5,7 @@ __pycache__/
 *.swo
 *~
 .env
+.env.bak
 .pytest_cache/
 audio-archive/
 *.egg-info/

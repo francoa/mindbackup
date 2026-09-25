@@ -10,11 +10,15 @@ USER_SPECIFICATION := --user $$(id -u)
 
 DOCKER_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo docker-compose || echo docker compose)
 
-.PHONY: help build manual-ingest doctor extract-dry-run extract-interactive extract ask \
+.PHONY: help setup build manual-ingest doctor extract-dry-run extract-interactive extract ask \
 	delete-memo start stop bash bash-root test lint format
 
 help: ## List available targets
 	grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-20s %s\n", $$1, $$2}'
+
+# e.g. `make setup STEP=telegram` to re-run one step.
+setup: ## Interactive first-time setup ([STEP=name])
+	bash scripts/setup.sh $(if $(STEP),--step $(STEP),)
 
 build: ## Build the service image
 	$(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILE) build $(SERVICE_NAME)
@@ -53,7 +57,7 @@ bash: ## Open a shell in the running container as your user
 	$(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILE) exec $(USER_SPECIFICATION) $(SERVICE_NAME) bash
 
 bash-root: ## Open a root shell in the running container
-	$(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILE) exec $(SERVICE_NAME) bash
+	$(DOCKER_COMPOSE) $(DOCKER_COMPOSE_FILE) exec --user root $(SERVICE_NAME) bash
 
 test: ## Run the test suite
 	uv run --extra dev pytest -q .

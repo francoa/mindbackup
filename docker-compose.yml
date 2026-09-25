@@ -33,7 +33,7 @@ services:
       # Raw audio archive (constraint C4: transcripts stay re-derivable).
       - ${ARCHIVE_PATH:-./archive}:/archive
       # Leave the following uncommented to allow hot reload (as in, not needing to rebuild)
-      - ./src:/app/src
+      - ./src:/app/src:ro
       - ./bin:/app/bin
 
     # The container's uid must be able to write the vault on the host.
@@ -53,10 +53,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    read_only: true
-    tmpfs:
-      # Voice notes are downloaded here, transcribed, then discarded.
-      - /tmp:size=512m,mode=1777
 
     # faster-whisper is CPU-bound; without a cap one long memo can starve the
     # host. Memory must exceed the model's peak RSS or the container is

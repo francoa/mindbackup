@@ -22,7 +22,38 @@ Runs the bot in an isolated container — useful because it handles untrusted
 input (audio from the internet) while holding a bot token and write access to
 your notes.
 
-1. First, create your `.env` file
+```bash
+just setup        # or `make setup` without just
+```
+
+The setup walks through every setting, one step at a time: checks the
+pre-requirements, creates the bot with @BotFather (and checks the token),
+finds the Telegram user ids to allow, creates the vault and archive folders,
+the optional LLM key, the Whisper model, the timezone and video links
+(yt-dlp for YouTube, or your own command). Then it builds
+the image and runs `doctor`. It writes `.env`, and by default keeps the bot
+token and LLM key in `~/.local/share/voice-mind-backup/` instead, out of reach
+of anything that reads `.env`.
+
+It is safe to re-run: every prompt defaults to the current value. To change one
+thing, re-run its step:
+
+```bash
+just setup --list             # the steps
+just setup --step telegram    # e.g. a new bot token
+make setup STEP=users         # same, with make
+```
+
+Then start the bot:
+
+```bash
+just start
+```
+
+<details>
+<summary>Manual setup (what the script does)</summary>
+
+1. Create your `.env` file
 ```bash
 cp .env.example .env      # required: compose reads it for secrets AND ${VAR}
 echo "UID=$(id -u)"  >> .env
@@ -31,8 +62,10 @@ echo "VAULT_PATH=$HOME/obsidian" >> .env  # Modify with your obsidian vault
 echo "ARCHIVE_PATH=$HOME/archive" >> .env
 ```
 2. Create your Telegram Bot by contacting `@BotFather`. Make sure you use the correct capitalization.
-3. Fill in your LLM API Token and the Bot Token
+3. Fill in your LLM API Token and the Bot Token. Compose needs both secret files
+   to exist; leave a file empty to use the `.env` value instead.
 ```bash
+mkdir -p ~/.local/share/voice-mind-backup
 # If you want to prevent the .env from containing secrets that might be read by an Agent, run
 echo $BOT_TOKEN > ~/.local/share/voice-mind-backup/token.txt
 echo $LLM_API_KEY > ~/.local/share/voice-mind-backup/llm-api-key.txt
@@ -49,6 +82,8 @@ echo "MINDBACKUP_ALLOWED_USERS=$USER_ID" >> .env
 ```bash
 just start
 ```
+
+</details>
 
 ## What it does
 

@@ -10,6 +10,10 @@ docker_compose_executable := if `which docker-compose || echo ""` != "" { "docke
 help: 
 	echo "Run just --list"
 
+# Interactive first-time setup (`--list` shows the steps, `--step NAME` re-runs one)
+setup *args:
+	bash scripts/setup.sh {{ args }}
+
 build:
     {{ docker_compose_executable }} {{ docker_compose_file }} build {{ service_name }}
 
@@ -46,7 +50,7 @@ bash:
 	{{ docker_compose_executable }} {{ docker_compose_file }} exec {{ user_specification }} {{ service_name }} bash	
 
 bash-root:
-	{{ docker_compose_executable }} {{ docker_compose_file }} exec {{ service_name }} bash
+	{{ docker_compose_executable }} {{ docker_compose_file }} exec --user root {{ service_name }} bash
 
 test:
 	uv run --extra dev pytest -q .
