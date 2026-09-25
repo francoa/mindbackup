@@ -8,6 +8,7 @@ ingest path at 22:00 on a Thursday.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,6 +19,8 @@ VALID_PROVIDERS = ("local",)
 DEFAULT_MODELS = {
     "local": "medium",
 }
+
+DEFAULT_VIDEO_URL_PATTERN = r"https?://\S+"
 
 
 class ConfigError(Exception):
@@ -83,6 +86,9 @@ class Settings:
     llm_model: str = ""
     llm_api_key: str = ""
     llm_timeout: float = 60.0
+    video_command: str = ""
+    video_url_pattern: str = DEFAULT_VIDEO_URL_PATTERN
+    video_timeout: float = 120.0
 
     @property
     def memo_path(self) -> Path:
@@ -173,6 +179,20 @@ def load_settings() -> Settings:
             f"MINDBACKUP_LLM_TIMEOUT must be a number of seconds, got {llm_timeout_raw!r}."
         ) from exc
 
+    video_timeout_raw = _get("MINDBACKUP_VIDEO_TIMEOUT")
+    try:
+        video_timeout = float(video_timeout_raw) if video_timeout_raw else 120.0
+    except ValueError as exc:
+        raise ConfigError(
+            f"MINDBACKUP_VIDEO_TIMEOUT must be a number of seconds, got {video_timeout_raw!r}."
+        ) from exc
+
+    video_url_pattern = _get("MINDBACKUP_VIDEO_URL_PATTERN") or DEFAULT_VIDEO_URL_PATTERN
+    try:
+        re.compile(video_url_pattern)
+    except re.error as exc:
+        raise ConfigError(f"MINDBACKUP_VIDEO_URL_PATTERN is not a valid regex: {exc}.") from exc
+
     return Settings(
         vault_path=vault_path,
         memo_dir=_get("MINDBACKUP_MEMO_DIR") or "Memos",
@@ -191,4 +211,7 @@ def load_settings() -> Settings:
         llm_model=_get("MINDBACKUP_LLM_MODEL"),
         llm_api_key=_get_from_secrets("llm_api_key", "MINDBACKUP_LLM_API_KEY"),
         llm_timeout=llm_timeout,
+        video_command=_get("MINDBACKUP_VIDEO_COMMAND"),
+        video_url_pattern=video_url_pattern,
+        video_timeout=video_timeout,
     )

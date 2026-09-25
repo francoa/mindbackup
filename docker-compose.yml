@@ -34,6 +34,7 @@ services:
       - ${ARCHIVE_PATH:-./archive}:/archive
       # Leave the following uncommented to allow hot reload (as in, not needing to rebuild)
       - ./src:/app/src
+      - ./bin:/app/bin
 
     # The container's uid must be able to write the vault on the host.
     # Default matches the image's `mindbackup` user; override if yours differs

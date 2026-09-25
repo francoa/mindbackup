@@ -31,10 +31,19 @@ class Memo:
     memo_date: date
 
 
-def render_memo(transcript: str, memo_date: date, source: str = "telegram") -> str:
-    """Render the markdown document. Minimal frontmatter, then raw transcript."""
+def render_memo(
+    transcript: str, memo_date: date, source: str = "telegram", url: str | None = None
+) -> str:
+    """Render the markdown document. Minimal frontmatter, then raw transcript.
+
+    `url` is where a transcript that wasn't recorded came from (a video link).
+    """
     body = transcript.strip()
-    return f"---\ndate: {memo_date.isoformat()}\ntype: memo\nsource: {source}\n---\n\n{body}\n"
+    url_line = f"url: {url}\n" if url else ""
+    return (
+        f"---\ndate: {memo_date.isoformat()}\ntype: memo\nsource: {source}\n{url_line}---\n\n"
+        f"{body}\n"
+    )
 
 
 def _unique_path(directory: Path, stem: str) -> Path:
@@ -70,6 +79,7 @@ def write_memo(
     memo_date: date,
     memo_dir: Path,
     source: str = "telegram",
+    url: str | None = None,
 ) -> Memo:
     """Write the transcript into the vault. Returns the created Memo."""
     text = (transcript or "").strip()
@@ -86,7 +96,7 @@ def write_memo(
     try:
         # x mode: fail loudly rather than clobber an existing memo (C4).
         with path.open("x", encoding="utf-8") as handle:
-            handle.write(render_memo(text, memo_date, source))
+            handle.write(render_memo(text, memo_date, source, url))
     except FileExistsError as exc:  # lost a race with a concurrent write
         raise VaultWriteError(f"{path.name} appeared while writing it.") from exc
     except OSError as exc:

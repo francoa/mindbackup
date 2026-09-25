@@ -20,6 +20,7 @@ from .proposal import Proposal
 from .stt import Transcript, TranscriptionError, transcribe
 from .topics import StoredAtom, known_topics
 from .vault import Memo, VaultWriteError, write_memo
+from .video import VideoError, fetch_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,33 @@ def ingest_audio(
     return IngestResult(memo=memo, transcript=transcript, archived_audio=archived)
 
 
+def ingest_video(
+    url: str,
+    settings: Settings,
+    *,
+    recorded_at: datetime | None = None,
+    source: str = "video",
+) -> IngestResult:
+    """Fetch a video's transcript and file it in the vault as a memo.
+
+    The same shape as `ingest_audio`, so everything downstream (extraction,
+    review) treats a video like a voice note. Nothing to archive: the link in
+    the frontmatter is the source.
+
+    Raises VideoError (a TranscriptionError) or VaultWriteError.
+    """
+    memo_date = resolve_memo_date(settings, recorded_at)
+
+    video = fetch_transcript(url, settings)
+    transcript = Transcript(
+        text=video.text, language=video.language, provider="video", model=video.tool
+    )
+
+    memo = write_memo(transcript.text, memo_date, settings.memo_path, source=source, url=video.url)
+    logger.info("Wrote memo %s from %s", memo.path, video.url)
+    return IngestResult(memo=memo, transcript=transcript, archived_audio=None)
+
+
 def read_memo_body(path: Path) -> str:
     """The transcript out of a memo file, minus the YAML frontmatter."""
     try:
@@ -239,8 +267,10 @@ __all__ = [
     "Proposal",
     "TranscriptionError",
     "VaultWriteError",
+    "VideoError",
     "extract_memo",
     "ingest_audio",
+    "ingest_video",
     "local_today",
     "memo_date_from_path",
     "propose_from_memo",

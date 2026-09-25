@@ -124,6 +124,7 @@ the bot and the CLI cannot disagree about what an approval files.
 | Command | What it does |
 | --- | --- |
 | *(send a voice note)* | transcribe into `Memos/`, then offer the extracted atoms for review |
+| *(send a video link)* | fetch the video's transcript with `MINDBACKUP_VIDEO_COMMAND` (see [Video links](#video-links)) into `Memos/`, then the same review |
 | `/get_topic` | list the topics, tap one to read its whole page |
 | `/get_topic <name>` | skip the list and open that topic straight away |
 | `/status` | where memos go, and today's count |
@@ -160,6 +161,27 @@ you make them: drag `lower-back.md` into `Topics/Health/` and new atoms keep
 appending to it there — the topic stays known to the extractor instead of
 reappearing as a duplicate flat page. The same holds for memos moved into
 subfolders of `Memos/`.
+
+### Video links
+
+Off until you configure a command that fetches a video's subtitles. The bot
+runs it without a shell, fills in `{url}` and `{out_dir}`, and reads back the
+`.vtt` or `.srt` file it wrote into `{out_dir}`. With several files named
+`<name>.<lang>.<ext>`, the one in `MINDBACKUP_STT_LANGUAGE` wins, otherwise the
+first by name.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `MINDBACKUP_VIDEO_COMMAND` | *(unset: off)* | the command; the URL is appended if `{url}` doesn't appear |
+| `MINDBACKUP_VIDEO_URL_PATTERN` | `https?://\S+` | regex a whole message must match to be treated as a video link |
+| `MINDBACKUP_VIDEO_TIMEOUT` | `120` | seconds before giving up |
+
+For example, with a yt-dlp binary dropped into `./bin` (mounted at `/app/bin`):
+
+```sh
+MINDBACKUP_VIDEO_COMMAND=/app/bin/yt-dlp --skip-download --no-playlist --write-subs --write-auto-subs --sub-langs ".*-orig,en.*" --sub-format vtt -o "{out_dir}/%(id)s.%(ext)s" -- {url}
+MINDBACKUP_VIDEO_URL_PATTERN=(?:https?://)?(?:www\.|m\.)?(?:youtube\.com/(?:watch\?\S*v=|shorts/|live/)|youtu\.be/)[\w-]{11}\S*
+```
 
 ## Docker Design Notes
 

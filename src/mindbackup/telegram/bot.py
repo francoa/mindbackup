@@ -32,6 +32,7 @@ from mindbackup.pipeline import (
     TranscriptionError,
     VaultWriteError,
     ingest_audio,
+    ingest_video,
     local_today,
     propose_from_transcript,
 )
@@ -73,6 +74,7 @@ from mindbackup.telegram.utils import get_settings
 from mindbackup.topic_view import topic_body
 from mindbackup.topics import known_topics, topic_counts
 from mindbackup.vault import iter_memos
+from mindbackup.video import is_video_url
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +82,8 @@ MAX_PREVIEW_CHARS = 500
 
 HELP_TEXT = (
     "🎙 *Voice Mind Backup*\n\n"
-    "Send me a voice note and I'll transcribe it into your Obsidian vault.\n\n"
+    "Send me a voice note and I'll transcribe it into your Obsidian vault. "
+    "A video link works too: I'll save its transcript.\n\n"
     "/get\\_topic — browse what's been filed, one topic at a time\n"
     "/status — show where memos go and today's count\n"
     "/help — this message"
@@ -256,6 +259,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await status.edit_text(f"❌ Unexpected failure: {type(exc).__name__}: {exc}")
             return
 
+    await _report_saved(status, update, context, result, settings)
+
+
+async def _report_saved(status, update: Update, context, result, settings: Settings) -> None:
+    """Confirm the memo on the status message, then offer extraction."""
     preview = result.transcript.text
     if len(preview) > MAX_PREVIEW_CHARS:
         preview = preview[:MAX_PREVIEW_CHARS].rsplit(" ", 1)[0] + "…"
@@ -497,7 +505,9 @@ async def _commit_review(
     await edit(render_filed(filed), parse_mode="Markdown")
 
 
-NOT_A_VOICE_NOTE = "Send me a voice note. Text messages aren't saved in Milestone 1."
+NOT_A_VOICE_NOTE = (
+    "Send me a voice note or a video link. Other text messages aren't saved in Milestone 1."
+)
 
 
 async def _ask_for_topics(
@@ -525,7 +535,8 @@ async def handle_topic_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
     replied = message.reply_to_message
     entry = prompts.pop(replied.message_id, None) if replied else None
     if entry is None:
-        await message.reply_text(NOT_A_VOICE_NOTE)
+        # A reply to anything else is just a text message.
+        await _handle_text(update, context)
         return
 
     review_id, index = entry
@@ -558,11 +569,36 @@ async def handle_topic_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 @authorizer
-async def handle_other(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _handle_text(update, context)
+
+
+async def _handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """A video link is ingested like a voice note, from its transcript."""
     message = update.effective_message
     if message is None:
         return
-    await message.reply_text(NOT_A_VOICE_NOTE)
+    text = message.text or ""
+    settings = get_settings(context)
+    if not is_video_url(text, settings):
+        await message.reply_text(NOT_A_VOICE_NOTE)
+        return
+
+    status = await message.reply_text("⏳ Fetching the transcript…")
+    try:
+        result = await asyncio.to_thread(
+            ingest_video, text, settings, recorded_at=message.date, source="video"
+        )
+    except (TranscriptionError, VaultWriteError) as exc:
+        logger.error("Video ingest failed: %s", exc)
+        await status.edit_text(f"❌ {exc}")
+        return
+    except Exception as exc:
+        logger.exception("Unexpected video ingest failure")
+        await status.edit_text(f"❌ Unexpected failure: {type(exc).__name__}: {exc}")
+        return
+
+    await _report_saved(status, update, context, result, settings)
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -588,11 +624,11 @@ def build_application(settings: Settings):
     app.add_handler(
         MessageHandler(filters.VOICE | filters.AUDIO | filters.Document.AUDIO, handle_voice)
     )
-    # Before handle_other: the first matching handler wins.
+    # Before handle_text: the first matching handler wins.
     app.add_handler(
         MessageHandler(filters.TEXT & filters.REPLY & ~filters.COMMAND, handle_topic_reply)
     )
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_other))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(handle_review_button, pattern=r"^mb:"))
     app.add_handler(CallbackQueryHandler(handle_topic_button, pattern=r"^mbt:"))
     app.add_error_handler(on_error)

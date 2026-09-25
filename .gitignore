@@ -13,3 +13,4 @@ audio-archive/
 .venv-verify/
 .tmp-audio/
 archive/
+bin
