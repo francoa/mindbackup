@@ -16,7 +16,6 @@ ENV_TEMPLATE="$ROOT/.env.example"
 SECRETS_DIR="${MINDBACKUP_SECRETS_DIR:-$HOME/.local/share/voice-mind-backup}"
 BOT_TOKEN_FILE="$SECRETS_DIR/token.txt"
 LLM_KEY_FILE="$SECRETS_DIR/llm-api-key.txt"
-BIN_DIR="$ROOT/bin"
 
 # name|title — order is the order they run in.
 STEPS=(
@@ -660,10 +659,10 @@ step_timezone() {
   ok "MINDBACKUP_TIMEZONE=$tz"
 }
 
-# The README's yt-dlp example. The binary lives in ./bin, mounted at /app/bin.
-YTDLP_COMMAND='/app/bin/yt-dlp --skip-download --sleep-subtitles 60 --no-playlist --write-subs --write-auto-subs --sub-langs ".*-orig,es.*" --sub-format vtt -o "{out_dir}/%(id)s.%(ext)s" -- {url}'
+# The default: the README's yt-dlp example, with Spanish subtitles and a pause
+# between subtitle downloads. The binary lives in ./bin, mounted at /app/bin.
+YTDLP_COMMAND='/app/bin/yt-dlp --skip-download --sleep-subtitles 30 --no-playlist --write-subs --write-auto-subs --sub-langs ".*-orig,es.*" --sub-format vtt -o "{out_dir}/%(id)s.%(ext)s" -- {url}'
 YTDLP_URL_PATTERN='(?:https?://)?(?:www\.|m\.)?(?:youtube\.com/(?:watch\?\S*v=|shorts/|live/)|youtu\.be/)[\w-]{11}\S*'
-DEFAULT_VIDEO_URL_PATTERN='https?://\S+'
 
 _valid_regex() {
   # The bot compiles it with Python's re; without python3, trust it.
@@ -674,9 +673,9 @@ _valid_regex() {
 _video_custom() {
   info "The bot runs it without a shell. {url} is the link (appended if missing);"
   info "the command must write a .vtt or .srt file into {out_dir}."
-  local command pattern
-  local video_command="$(env_get MINDBACKUP_VIDEO_COMMAND | grep . || echo "$YTDLP_COMMAND")"
-  local url_pattern="$(env_get MINDBACKUP_VIDEO_URL_PATTERN | grep . || echo "$YTDLP_URL_PATTERN")"
+  local command pattern video_command url_pattern
+  video_command=$(env_get MINDBACKUP_VIDEO_COMMAND | grep . || echo "$YTDLP_COMMAND")
+  url_pattern=$(env_get MINDBACKUP_VIDEO_URL_PATTERN | grep . || echo "$YTDLP_URL_PATTERN")
   while true; do
     command=$(ask "Command" "$video_command")
     [[ -n $command ]] && break
@@ -706,10 +705,8 @@ step_video() {
 
   local current default=1
   current=$(env_get MINDBACKUP_VIDEO_COMMAND)
-  if [[ $current == "$YTDLP_COMMAND" ]]; then
+  if [[ -n $current ]]; then
     default=2
-  elif [[ -n $current ]]; then
-    default=3
     info "Current command: $current"
   fi
 
@@ -729,9 +726,9 @@ step_video() {
 
   local timeout
   while true; do
-    timeout=$(ask "Seconds to wait for the command" "$(env_get MINDBACKUP_VIDEO_TIMEOUT | grep . || echo 120)")
+    timeout=$(ask "Seconds to wait for the command" "$(env_get MINDBACKUP_VIDEO_TIMEOUT | grep . || echo 240)")
     [[ $timeout =~ ^[0-9]+(\.[0-9]+)?$ ]] && break
-    warn "A number of seconds, e.g. 120."
+    warn "A number of seconds, e.g. 240."
   done
   env_set MINDBACKUP_VIDEO_TIMEOUT "$timeout"
 }

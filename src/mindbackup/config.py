@@ -94,7 +94,7 @@ class Settings:
     llm_timeout: float = 60.0
     video_command: str = ""
     video_url_pattern: str = DEFAULT_VIDEO_URL_PATTERN
-    video_timeout: float = 120.0
+    video_timeout: float = 240.0
 
     @property
     def memo_path(self) -> Path:
@@ -187,7 +187,7 @@ def load_settings() -> Settings:
 
     video_timeout_raw = _get("MINDBACKUP_VIDEO_TIMEOUT")
     try:
-        video_timeout = float(video_timeout_raw) if video_timeout_raw else 120.0
+        video_timeout = float(video_timeout_raw) if video_timeout_raw else 240.0
     except ValueError as exc:
         raise ConfigError(
             f"MINDBACKUP_VIDEO_TIMEOUT must be a number of seconds, got {video_timeout_raw!r}."

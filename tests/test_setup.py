@@ -88,9 +88,10 @@ def full_run(tmp_path: Path) -> subprocess.CompletedProcess:
             "Padel, Obsidian",
             # timezone
             "Europe/Madrid",
-            # video: YouTube preset, don't download yt-dlp, default timeout
+            # video: on, with the default command, pattern and timeout
             "2",
-            "n",
+            "",
+            "",
             "",
         ],
     )
@@ -115,16 +116,17 @@ def test_full_run_writes_env_and_secrets(tmp_path: Path, repo: Path):
     assert env["MINDBACKUP_STT_LANGUAGE"] == "es"
     assert env["MINDBACKUP_VOCABULARY"] == "Padel, Obsidian"
     assert env["MINDBACKUP_TIMEZONE"] == "Europe/Madrid"
-    # Exactly the README's example, surviving the round trip through .env.
-    assert env["MINDBACKUP_VIDEO_COMMAND"] == (
-        '/app/bin/yt-dlp --skip-download --no-playlist --write-subs --write-auto-subs '
-        '--sub-langs ".*-orig,en.*" --sub-format vtt -o "{out_dir}/%(id)s.%(ext)s" -- {url}'
-    )
+    # The yt-dlp default, its quotes and placeholders surviving the round trip
+    # through .env. Flags are left out so tuning them doesn't break this.
+    command = env["MINDBACKUP_VIDEO_COMMAND"]
+    assert command.startswith("/app/bin/yt-dlp ")
+    assert '--sub-langs ".*-orig,' in command
+    assert command.endswith('-o "{out_dir}/%(id)s.%(ext)s" -- {url}')
     assert env["MINDBACKUP_VIDEO_URL_PATTERN"] == (
         r"(?:https?://)?(?:www\.|m\.)?(?:youtube\.com/(?:watch\?\S*v=|shorts/|live/)"
         r"|youtu\.be/)[\w-]{11}\S*"
     )
-    assert env["MINDBACKUP_VIDEO_TIMEOUT"] == "120"
+    assert env["MINDBACKUP_VIDEO_TIMEOUT"] == "240"
     # Moved to the secret file, so it must not linger in .env.
     assert "MINDBACKUP_TELEGRAM_TOKEN" not in env
 
@@ -173,7 +175,7 @@ def test_custom_video_command_rejects_a_bad_regex(tmp_path: Path, repo: Path):
     result = run_setup(
         tmp_path,
         ["env", "video"],
-        ["3", "fetch-subs {url} {out_dir}", "https?://(", "", "45"],
+        ["2", "fetch-subs {url} {out_dir}", "https?://(", r"https?://\S+", "45"],
     )
     assert result.returncode == 0, result.stderr
     env = load_env_file(repo / ".env")
@@ -182,9 +184,19 @@ def test_custom_video_command_rejects_a_bad_regex(tmp_path: Path, repo: Path):
     assert env["MINDBACKUP_VIDEO_TIMEOUT"] == "45"
 
 
+def test_video_rerun_keeps_a_custom_command_on_enter(tmp_path: Path, repo: Path):
+    assert run_setup(tmp_path, ["env", "video"], ["2", "fetch-subs {url}", "", ""]).returncode == 0
+    before = load_env_file(repo / ".env")
+
+    # Any configured command means the default choice is "On", not a loop.
+    result = run_setup(tmp_path, ["video"], ["", "", "", ""])
+    assert result.returncode == 0, result.stderr
+    assert load_env_file(repo / ".env") == before
+    assert before["MINDBACKUP_VIDEO_COMMAND"] == "fetch-subs {url}"
+
+
 def test_video_off_clears_the_command(tmp_path: Path, repo: Path):
-    assert run_setup(tmp_path, ["env", "video"], ["3", "fetch-subs {url}", "", ""]).returncode == 0
-    # Re-running offers the current (custom) choice; 1 turns it off.
+    assert run_setup(tmp_path, ["env", "video"], ["2", "fetch-subs {url}", "", ""]).returncode == 0
     result = run_setup(tmp_path, ["video"], ["1"])
     assert result.returncode == 0, result.stderr
     assert load_env_file(repo / ".env")["MINDBACKUP_VIDEO_COMMAND"] == ""

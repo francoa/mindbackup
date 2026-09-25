@@ -209,7 +209,7 @@ first by name.
 | --- | --- | --- |
 | `MINDBACKUP_VIDEO_COMMAND` | *(unset: off)* | the command; the URL is appended if `{url}` doesn't appear |
 | `MINDBACKUP_VIDEO_URL_PATTERN` | `https?://\S+` | regex a whole message must match to be treated as a video link |
-| `MINDBACKUP_VIDEO_TIMEOUT` | `120` | seconds before giving up |
+| `MINDBACKUP_VIDEO_TIMEOUT` | `240` | seconds before giving up |
 
 For example, with a yt-dlp binary dropped into `./bin` (mounted at `/app/bin`):
 
@@ -228,8 +228,13 @@ MINDBACKUP_VIDEO_URL_PATTERN=(?:https?://)?(?:www\.|m\.)?(?:youtube\.com/(?:watc
   (`HF_HUB_CACHE`, not `HF_HOME` — `download_model(cache_dir=X)` writes to
   `X/models--…` whereas `HF_HOME=X` looks in `X/hub`, so the offline load
   fails if you use the wrong one.)
-- `read_only: true` with a tmpfs `/tmp`: voice notes are downloaded, transcribed
-  and discarded in RAM. Nothing outside the vault and archive mounts persists.
+- **Temporarily not read-only.** The image installs Deno (needed by some video
+  processing), and the container's filesystem is writable while that is being
+  worked out: `read_only: true` and the tmpfs `/tmp` are off in
+  `docker-compose.yml`. The goal is to restore them, so voice notes are again
+  downloaded, transcribed and discarded in RAM and nothing outside the vault and
+  archive mounts persists. Until then, `/tmp` lives on the container's writable
+  layer, and the Deno install script is fetched unpinned at build time.
 - `cap_drop: ALL` + `no-new-privileges`, non-root uid, and **no inbound ports**
   — long polling means nothing needs to be exposed.
 - Change the model without touching code: `WHISPER_MODEL=small docker compose build`.
